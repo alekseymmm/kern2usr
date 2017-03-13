@@ -5,6 +5,8 @@
  *      Author: root
  */
 
+
+
 #ifndef KERN_H_
 #define KERN_H_
 
@@ -15,8 +17,6 @@
 #define BUF_SIZE  (NDRIVES * 4096)
 #define BUF_TEST_SIZE BUF_SIZE
 #define MAJOR_NUM 239
-
-
 
 /* Set the message of the device driver */
 #define IOCTL_SET_MSG _IOR(MAJOR_NUM, 0, char *)

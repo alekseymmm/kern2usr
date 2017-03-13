@@ -49,34 +49,21 @@ int main()
 	struct timespec time_start, time_stop, dtime;
 	struct timespec total_time;
 
-	chdev_fd = open(pathname, O_RDWR);
-	if(chdev_fd < 0)
-	{
-		printf("Failed to open %s \n", pathname);
-        printf("Error no is : %d\n", errno);
-        printf("Error description is : %s\n",strerror(errno));
-		goto out1;
-	}
-	printf("Char dev %s opened \n", pathname);
-
 	//create eventfd
 	efd = eventfd(0, 0);
 	if(efd < 0){
 		printf("Unable to create evenfd. Exiting...\n");
 		goto out1;
 	}
+	printf("Eventfd created efd=%d pid=%d\n", efd, getpid());
 
-	pollfd.fd = chdev_fd;
+	pollfd.fd = efd;
 	pollfd.events = POLLIN;
-
-	usr_buf = (char *)mmap(NULL, BUF_TEST_SIZE, PROT_READ | PROT_WRITE, MAP_PRIVATE, chdev_fd, 0);
-
-	if(usr_buf == MAP_FAILED){
-		perror("mmap failed, Exiting...\n");
-		goto out2;
-	}
-
 	//ioctl_set_msg(fd, NULL);
+
+	printf("Start polling...\n");
+	fflush(stdout);
+
 	while(1){
 		result = poll(&pollfd, 1, timeout);
 		switch (result) {
@@ -86,6 +73,26 @@ int main()
 		case -1:
 			printf("poll error -1. Exiting...\n");
 			goto out3;
+		case 1:
+			printf("Got 1 in polling eventfd\n");
+			chdev_fd = open(pathname, O_RDWR);
+			if(chdev_fd < 0)
+			{
+				printf("Failed to open %s \n", pathname);
+		        printf("Error no is : %d\n", errno);
+		        printf("Error description is : %s\n",strerror(errno));
+				goto out1;
+			}
+			printf("Char dev %s opened \n", pathname);
+
+			usr_buf = (char *)mmap(NULL, BUF_TEST_SIZE, PROT_READ | PROT_WRITE, MAP_PRIVATE, chdev_fd, 0);
+
+			if(usr_buf == MAP_FAILED){
+				perror("mmap failed, Exiting...\n");
+				goto out2;
+			}
+			printf("Memory from char dev = %d mmaped to %p \n", chdev_fd, usr_buf);
+			break;
 		default:
 			if(pollfd.revents & POLLIN)
 			{

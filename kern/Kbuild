@@ -2,6 +2,7 @@ ccflags-y := -g -O0 -Wall -Werror\
  -mno-red-zone -mcmodel=kernel \
   -fno-dwarf2-cfi-asm
 
-kern-y := kern_main.o 
+kern-y := 	kern_main.o\
+			fops_chdev.o 
 
-obj-m := kern.o
+obj-m := kern.o 

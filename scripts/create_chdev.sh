@@ -1,1 +1,1 @@
-mknod /dev/char/mmaptest c 238 1
+mknod /dev/char/mmaptest c 239 1
