@@ -1,0 +1,2 @@
+#killall usr
+rmmod kern
