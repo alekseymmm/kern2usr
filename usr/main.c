@@ -49,6 +49,8 @@ int main()
 	struct timespec time_start, time_stop, dtime;
 	struct timespec total_time;
 
+	uint64_t u = 0;
+
 	//create eventfd
 	efd = eventfd(0, 0);
 	if(efd < 0){
@@ -92,6 +94,10 @@ int main()
 				goto out2;
 			}
 			printf("Memory from char dev = %d mmaped to %p \n", chdev_fd, usr_buf);
+
+			read(pollfd.fd, &u, sizeof(uint64_t));
+			printf("Eventfd reset to 0\n");
+
 			break;
 		default:
 			if(pollfd.revents & POLLIN)

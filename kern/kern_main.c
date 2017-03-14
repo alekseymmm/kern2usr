@@ -45,6 +45,7 @@ long long int ktotal_time = 0;
 //Structs from userspace
 unsigned long usr_pid = 0;
 unsigned long usr_efd = 0;
+unsigned long cur_cmd = 0;
 
 //Structs to resolve references to fd
 struct task_struct *userspace_task = NULL;	//ptr to usr space task struct
@@ -85,6 +86,26 @@ static int __set_usr_efd(const char *str, struct kernel_param *kp){
 
 static int __get_usr_efd(char *buffer, struct kernel_param *kp){
 	return scnprintf(buffer, PAGE_SIZE, "%lu", usr_efd);
+}
+
+
+static int __set_cur_cmd(const char *str, struct kernel_param *kp){
+	int retval;
+	retval = kstrtoul(str, 10, &cur_cmd);
+	if(retval < 0){
+		printk("Error while parsing mmap_ready param.\n");
+		return -1;
+	}
+
+	if(cur_cmd == 1){
+		eventfd_signal(efd_ctx, 1);
+	}
+
+	return 0;
+}
+
+static int __get_cur_cmd(char *buffer, struct kernel_param *kp){
+	return scnprintf(buffer, PAGE_SIZE, "%lu", cur_cmd);
 }
 
 void fill_buffer(char *buf, unsigned long long len)
@@ -229,8 +250,8 @@ module_param_call(usr_pid, __set_usr_pid, __get_usr_pid, NULL, S_IRUGO | S_IWUSR
 MODULE_PARM_DESC(usr_efd, "Userspace eventfd to monitor");
 module_param_call(usr_efd, __set_usr_efd, __get_usr_efd, NULL, S_IRUGO | S_IWUSR);
 
-MODULE_PARM_DESC(do_mmap, "Userspace eventfd to monitor");
-module_param_call(usr_efd, __set_usr_efd, __get_usr_efd, NULL, S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC(_cur_cmd, "Cmd to execute");
+module_param_call(cur_cmd, __set_cur_cmd, __get_cur_cmd, NULL, S_IRUGO | S_IWUSR);
 
 MODULE_AUTHOR("AM");
 
