@@ -12,7 +12,7 @@
 
 #include <linux/ioctl.h>
 
-#define NDRIVES 32
+#define NDRIVES 1
 #define DEVICE_NAME "mmaptest"
 #define BUF_SIZE  (NDRIVES * 4096)
 #define BUF_TEST_SIZE BUF_SIZE
@@ -22,6 +22,8 @@
 #define EFD_MMAP_CMD 2
 #define EFD_START_TEST_CMD 3
 #define EFD_STOP_TEST_CMD 4
+#define EFD_MEMORY_READY 5
+#define EFD_MEMORY_COPIED 6
 
 /* Set the message of the device driver */
 #define IOCTL_SET_MSG _IOR(MAJOR_NUM, 0, char *)

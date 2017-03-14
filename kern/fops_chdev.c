@@ -25,7 +25,7 @@
 
 #include "kern.h"
 
-extern wait_queue_head_t wq_buffer; //wait till the buffer filled;
+//extern wait_queue_head_t wq_buffer; //wait till the buffer filled;
 extern char *buffer;
 extern int buffer_filled;
 extern int calculation_done;
@@ -58,15 +58,16 @@ int mmaptest_mmap(struct file *filp, struct vm_area_struct *vma)
 
 	printk("mmaptest_mmap called...\n");
 
-	//if userspace tries to mmap beyond end of the buffer
-	if(size > BUF_SIZE){
-		printk("Error: try to mmap beyond buffer length.\n");
-		return -EINVAL;
-	}
-
 	printk("vma->vm_pgoff = %lu\n", vma->vm_pgoff);
 	printk("vma->vm_start = %lu\n", vma->vm_start);
 	printk("vma->vm_end = %lu\n", vma->vm_end);
+	printk("mmap size = %lu, BUF_TEST_SIZE = %d\n", size, BUF_TEST_SIZE);
+
+	//if userspace tries to mmap beyond end of the buffer
+	if(size > BUF_TEST_SIZE){
+		printk("Error: try to mmap beyond buffer length.\n");
+		return -EINVAL;
+	}
 
 	vma->vm_page_prot.pgprot |= VM_WRITE;
 	printk("vma->vm_page_prot = %lu\n", vma->vm_page_prot.pgprot);
@@ -125,7 +126,7 @@ unsigned int mmaptest_poll(struct file *file, struct poll_table_struct *pwait)
 {
 	unsigned int mask = 0;
 
-	poll_wait(file, &wq_buffer, pwait);
+	//poll_wait(file, &wq_buffer, pwait);
 	//printk("In poll: buffer_filled = %d, calculation_done = %d\n", buffer_filled, calculation_done);
 
 	if(buffer_filled && !calculation_done){

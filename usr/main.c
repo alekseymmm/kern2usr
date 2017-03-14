@@ -25,8 +25,10 @@
 
 int chdev_fd;
 int efd;
+int efd2;
 char *pathname = "/dev/char/mmaptest";;
 char *buffer = NULL;
+char *dst_buffer = NULL;
 
 int ioctl_set_msg(int file_dsc, char *message)
 {
@@ -41,7 +43,6 @@ int ioctl_set_msg(int file_dsc, char *message)
 }
 
 int do_mmap(char *pathname){
-	printf("Got 1 in polling eventfd\n");
 	chdev_fd = open(pathname, O_RDWR);
 	if(chdev_fd < 0)
 	{
@@ -53,7 +54,7 @@ int do_mmap(char *pathname){
 	else {
 		printf("Char dev %s opened \n", pathname);
 
-		 buffer = (char *)mmap(NULL, BUF_TEST_SIZE, PROT_READ | PROT_WRITE, MAP_PRIVATE, chdev_fd, 0);
+		buffer = (char *)mmap(NULL, BUF_TEST_SIZE, PROT_READ | PROT_WRITE, MAP_PRIVATE, chdev_fd, 0);
 
 		if(buffer == MAP_FAILED){
 			perror("mmap failed, Exiting...\n");
@@ -62,9 +63,7 @@ int do_mmap(char *pathname){
 		}
 		printf("Memory from char dev = %d mmaped to %p \n", chdev_fd, buffer);
 	}
-//		read(pollfd.fd, &u, sizeof(uint64_t));
-//					printf("Eventfd reset to 0 after mmap\n");
-//				}
+
 	return 0;
 }
 
@@ -73,9 +72,10 @@ void handle_polling(struct pollfd* pollfd)
 	uint64_t value = 0;
 	read(pollfd->fd, &value, sizeof(uint64_t));
 
-	printf("In handling_polling value in eventfd = %d\n", value);
+	printf("In handling_polling value in eventfd = %lu\n", value);
 	switch(value){
 	case EFD_MMAP_CMD:
+		printf("Got mmap command in polling eventfd\n");
 		do_mmap(pathname);
 		break;
 	case EFD_START_TEST_CMD:
@@ -84,7 +84,15 @@ void handle_polling(struct pollfd* pollfd)
 	case EFD_STOP_TEST_CMD:
 		printf("Eventfd reset to 0 after test stop\n");
 		break;
+	case EFD_MEMORY_READY:
+		printf("Eventfd notified that memory is ready, and set to 0\n");
+		memcpy(dst_buffer, buffer, BUF_TEST_SIZE);
+		value = EFD_MEMORY_COPIED;
+		sleep(1);
+		write(efd2, &value, sizeof(uint64_t));
+		printf("Memory successfully copied and %d has been written to efd2\n", EFD_MEMORY_COPIED);
 	}
+	printf("handling_polling done!\n");
 }
 
 
@@ -96,7 +104,7 @@ int main()
 	struct timespec time_start, time_stop, dtime;
 	struct timespec total_time;
 
-
+	dst_buffer = malloc(BUF_TEST_SIZE);
 	//create eventfd
 	efd = eventfd(0, 0);
 	if(efd < 0){
@@ -104,6 +112,13 @@ int main()
 		goto out1;
 	}
 	printf("Eventfd created efd=%d pid=%d\n", efd, getpid());
+
+	efd2 = eventfd(0, 0);
+	if(efd2 < 0){
+		printf("Unable to create 2nd evenfd. Exiting...\n");
+		goto out1;
+	}
+	printf("Eventfd created efd2=%d pid=%d\n", efd2, getpid());
 
 	pollfd.fd = efd;
 	pollfd.events = POLLIN;
@@ -146,9 +161,11 @@ int main()
 out3:
 	munmap(buffer, BUF_TEST_SIZE);
 out2:
-	close(efd);
-out1:
 	close(chdev_fd);
+out1:
+	close(efd);
+
+	free(dst_buffer);
 	printf("done!\n");
 	return 0;
 }

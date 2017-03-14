@@ -28,13 +28,17 @@
 #include "kern.h"
 #include "fops_chdev.h"
 
+/** Internal workqueue */
+struct workqueue_struct *kern_wq = NULL;
+struct work_struct  work;   /**< Used to redirect to a different thread */
+
 char *buffer;
 int buffer_filled = 0;
 int calculation_done = 0;
+int testing_started = 0;
 static int Major  ;
 
 struct timer_list calc_timer;
-wait_queue_head_t wq_buffer; //wait till the buffer filled
 
 long long int start_time = 0, stop_time = 0;
 long long int total_time = 0;
@@ -45,14 +49,18 @@ long long int ktotal_time = 0;
 //Structs from userspace
 unsigned long usr_pid = 0;
 unsigned long usr_efd = 0;
+unsigned long usr_efd2 = 0;
 unsigned long cur_cmd = 0;
 
 //Structs to resolve references to fd
 struct task_struct *userspace_task = NULL;	//ptr to usr space task struct
 struct file *efd_file = NULL;				//ptr to eventfd's file struct
+struct file *efd_file2 = NULL;				//ptr to eventfd's file struct
 struct eventfd_ctx *efd_ctx = NULL;			//ptr to eventfd context
+struct eventfd_ctx *efd_ctx2 = NULL;			//ptr to eventfd context
 
 int parse_usr_param(void);
+static void __monitor_efd2(struct work_struct *ws);
 
 static int __set_usr_pid(const char *str, struct kernel_param *kp){
 	int retval;
@@ -84,6 +92,20 @@ static int __get_usr_efd(char *buffer, struct kernel_param *kp){
 	return scnprintf(buffer, PAGE_SIZE, "%lu", usr_efd);
 }
 
+static int __set_usr_efd2(const char *str, struct kernel_param *kp){
+	int retval;
+	retval = kstrtoul(str, 10, &usr_efd2);
+	if(retval < 0){
+		printk("Error while parsing usr_efd2.\n");
+		return -1;
+	}
+
+	return 0;
+}
+
+static int __get_usr_efd2(char *buffer, struct kernel_param *kp){
+	return scnprintf(buffer, PAGE_SIZE, "%lu", usr_efd2);
+}
 
 static int __set_cur_cmd(const char *str, struct kernel_param *kp){
 	int retval;
@@ -97,17 +119,25 @@ static int __set_cur_cmd(const char *str, struct kernel_param *kp){
 	case EFD_FIND:
 		parse_usr_param();
 		break;
+
 	case EFD_MMAP_CMD:
 		eventfd_signal(efd_ctx, EFD_MMAP_CMD);
 		break;
+
 	case EFD_START_TEST_CMD:
 		add_timer(&calc_timer);
+		testing_started = 1;
 		printk("Timer is started.\n");
+		eventfd_signal(efd_ctx, EFD_START_TEST_CMD);
 		break;
+
 	case EFD_STOP_TEST_CMD:
 		del_timer_sync(&calc_timer);
+		testing_started = 0;
 		printk("Timer is deleted.\n");
+		eventfd_signal(efd_ctx, EFD_STOP_TEST_CMD);
 		break;
+
 	default:
 		printk("Unsupported command.\n");
 	}
@@ -131,7 +161,7 @@ void fill_buffer(char *buf, unsigned long long len)
 	buffer_filled = 1;
 
 	calculation_done = 0;
-	eventfd_signal(efd_ctx, 1);
+	eventfd_signal(efd_ctx, EFD_MEMORY_READY);
 	//wake_up_interruptible(&wq_buffer);
 	
 	printk("Buffer filled\n");
@@ -173,37 +203,72 @@ static struct file_operations mmaptest_fops = {
 static void __timer_handler(unsigned long param)
 {
 	printk("Timer handler called\n");
-   /*
+	printk("In handler: buffer_filled = %d, calculation_done = %d\n", buffer_filled, calculation_done);
+
+	//start monitoring for completion
+	printk("Start monitoring for efd2...\n");
+	queue_work(kern_wq, &work);
+
 	if(!buffer_filled || calculation_done){
 		fill_buffer(buffer, BUF_TEST_SIZE);
 		//print_buf(buffer, BUF_TEST_SIZE);
 	}
-	printk("In handler: buffer_filled = %d, calculation_done = %d\n", buffer_filled, calculation_done);
-*/
-	//mod_timer(&calc_timer, jiffies + msecs_to_jiffies(5000));
+
+	mod_timer(&calc_timer, jiffies + msecs_to_jiffies(5000));
 }
 
 int parse_usr_param(){
 	//parse userspace argumetns to find efd
-	printk("Received from userspace: usr_pid=%lu, efd=%lu\n", usr_pid, usr_efd);
+	printk("Received from userspace: usr_pid=%lu, efd=%lu, efd2=%lu\n", usr_pid, usr_efd, usr_efd2);
 
 	userspace_task = pid_task(find_vpid(usr_pid), PIDTYPE_PID);
 	printk("Resolved pointer to the userspace program task struct: %p\n",userspace_task);
 
 	rcu_read_lock();
 	efd_file = fcheck_files(userspace_task->files, usr_efd);
+	efd_file2 = fcheck_files(userspace_task->files, usr_efd2);
 	rcu_read_unlock();
 
-	printk("Resolved pointer to the userspace program's eventfd's file struct: %p\n",efd_file);
+	printk("Resolved pointer to the userspace program's eventfd's file struct: %p and struct2 : %p\n",efd_file, efd_file2);
 
 	efd_ctx = eventfd_ctx_fileget(efd_file);
-	if(!efd_ctx){
+	efd_ctx2 = eventfd_ctx_fileget(efd_file2);
+	if(!efd_ctx || !efd_ctx2){
 		printk("eventfd_ctx_fileget() failed..\n");
 		unregister_chrdev(Major, DEVICE_NAME);
 		return -1;
 	}
-	printk("Resolved pointer to the userspace program's eventfd's context: %p\n", efd_ctx);
+	printk("Resolved pointer to the userspace program's eventfd's context: %p and context2 : %p\n", efd_ctx, efd_ctx2);
 	return 0;
+}
+
+static void __monitor_efd2(struct work_struct *ws){
+//	struct tier_data *data = container_of(ws, struct tier_data, work);
+//	tier_swap_chunks(data);
+//	//TODO: Restart timer  or not ?
+//	mod_timer(&data->vs->timer, jiffies + msecs_to_jiffies(atomic_read(&data->vs->delay)));
+	uint64_t value = 0;
+	int res = 0;
+	printk("Monitoring efd2 run in  other thread.\n");
+
+	if(testing_started){
+		printk("In monitoring efd2  testing started  == 1 \n");
+		res = eventfd_ctx_read(efd_ctx2, 0, &value);
+			if(res < 0){
+				printk("Error in eventfd_ctx_read : %d\n", res);
+			}
+			else{
+				printk("After eventfd_ctx_read  value = %llu\n", value);
+				if(value == EFD_MEMORY_COPIED){
+					stop_time = ktime_to_ns(ktime_get());
+					printk("Time to copy = %llu\n", stop_time - start_time);
+					calculation_done = 1;
+					buffer_filled = 0;
+				}
+			}
+		}
+
+	printk("Exit from __monitor_efd2\n");
 }
 
 static int __init_module ( void )
@@ -217,21 +282,28 @@ static int __init_module ( void )
 	}
 	printk("Char dev with Major = %d was created\n", MAJOR_NUM);
 
-	buffer = kmalloc(BUF_SIZE, GFP_KERNEL);
+	buffer = kmalloc(BUF_TEST_SIZE, GFP_KERNEL);
 	printk("Buffer allocated\n");
 	buffer_filled = 0;
 
-	init_waitqueue_head(&wq_buffer);
-	printk("Wait queue initialized.\n");
+	kern_wq = create_singlethread_workqueue("Kern_WQ");
+	if(!kern_wq){
+	   	printk("Cold not create the kern workqueue!\n");
+	   	goto out;
+	}
+	INIT_WORK(&work, __monitor_efd2);
+	printk("Work queue created.\n");
+
 
 	calc_timer.expires = jiffies + msecs_to_jiffies(5000);
 	calc_timer.function = __timer_handler;
 	init_timer(&calc_timer);
-	//add_timer(&calc_timer);
-
-	//printk("Timer started!\n");
 
 	return 0;
+
+out:
+	kfree(buffer);
+	return -1;
 }
 
 static void __cleanup_module(void)
@@ -243,6 +315,12 @@ static void __cleanup_module(void)
 		eventfd_ctx_put(efd_ctx);
 		printk("Put eventfd context\n");
 	}
+	if(efd_ctx2 != NULL){
+		eventfd_ctx_put(efd_ctx2);
+		printk("Put eventfd context2\n");
+	}
+	destroy_workqueue(kern_wq);
+	printk("Work queue destroyed.\n");
 
 	release_buffer(buffer);
 	printk("Buffer released.\n");
@@ -260,6 +338,9 @@ module_param_call(usr_pid, __set_usr_pid, __get_usr_pid, NULL, S_IRUGO | S_IWUSR
 
 MODULE_PARM_DESC(usr_efd, "Userspace eventfd to monitor");
 module_param_call(usr_efd, __set_usr_efd, __get_usr_efd, NULL, S_IRUGO | S_IWUSR);
+
+MODULE_PARM_DESC(usr_efd2, "Userspace eventfd for cope done notification");
+module_param_call(usr_efd2, __set_usr_efd2, __get_usr_efd2, NULL, S_IRUGO | S_IWUSR);
 
 MODULE_PARM_DESC(_cur_cmd, "Cmd to execute");
 module_param_call(cur_cmd, __set_cur_cmd, __get_cur_cmd, NULL, S_IRUGO | S_IWUSR);
