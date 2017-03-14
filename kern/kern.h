@@ -18,6 +18,11 @@
 #define BUF_TEST_SIZE BUF_SIZE
 #define MAJOR_NUM 239
 
+#define EFD_FIND 1
+#define EFD_MMAP_CMD 2
+#define EFD_START_TEST_CMD 3
+#define EFD_STOP_TEST_CMD 4
+
 /* Set the message of the device driver */
 #define IOCTL_SET_MSG _IOR(MAJOR_NUM, 0, char *)
 /* _IOR means that we're creating an ioctl command

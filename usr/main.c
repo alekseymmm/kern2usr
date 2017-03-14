@@ -23,6 +23,11 @@
 #include "utils.h"
 //#include "engine.h"
 
+int chdev_fd;
+int efd;
+char *pathname = "/dev/char/mmaptest";;
+char *buffer = NULL;
+
 int ioctl_set_msg(int file_dsc, char *message)
 {
 	int ret_val;
@@ -35,21 +40,62 @@ int ioctl_set_msg(int file_dsc, char *message)
 	return 0;
 }
 
+int do_mmap(char *pathname){
+	printf("Got 1 in polling eventfd\n");
+	chdev_fd = open(pathname, O_RDWR);
+	if(chdev_fd < 0)
+	{
+		printf("Failed to open %s \n", pathname);
+	    printf("Error no is : %d\n", errno);
+	    printf("Error description is : %s\n",strerror(errno));
+	    return -1;
+	}
+	else {
+		printf("Char dev %s opened \n", pathname);
+
+		 buffer = (char *)mmap(NULL, BUF_TEST_SIZE, PROT_READ | PROT_WRITE, MAP_PRIVATE, chdev_fd, 0);
+
+		if(buffer == MAP_FAILED){
+			perror("mmap failed, Exiting...\n");
+			close(chdev_fd);
+			return -1;
+		}
+		printf("Memory from char dev = %d mmaped to %p \n", chdev_fd, buffer);
+	}
+//		read(pollfd.fd, &u, sizeof(uint64_t));
+//					printf("Eventfd reset to 0 after mmap\n");
+//				}
+	return 0;
+}
+
+void handle_polling(struct pollfd* pollfd)
+{
+	uint64_t value = 0;
+	read(pollfd->fd, &value, sizeof(uint64_t));
+
+	printf("In handling_polling value in eventfd = %d\n", value);
+	switch(value){
+	case EFD_MMAP_CMD:
+		do_mmap(pathname);
+		break;
+	case EFD_START_TEST_CMD:
+		printf("Eventfd reset to 0 after test start\n");
+		break;
+	case EFD_STOP_TEST_CMD:
+		printf("Eventfd reset to 0 after test stop\n");
+		break;
+	}
+}
+
 
 int main()
 {
-	char *pathname = "/dev/char/mmaptest";
-//	/char *usr_str = "String from usr\n";
-	char *usr_buf;
-	int chdev_fd;
-	int efd;
 	//int result, timeout = 1000000;
 	int result, timeout = 10000;
 	struct pollfd pollfd;
 	struct timespec time_start, time_stop, dtime;
 	struct timespec total_time;
 
-	uint64_t u = 0;
 
 	//create eventfd
 	efd = eventfd(0, 0);
@@ -75,41 +121,20 @@ int main()
 		case -1:
 			printf("poll error -1. Exiting...\n");
 			goto out3;
-		case 1:
-			printf("Got 1 in polling eventfd\n");
-			chdev_fd = open(pathname, O_RDWR);
-			if(chdev_fd < 0)
-			{
-				printf("Failed to open %s \n", pathname);
-		        printf("Error no is : %d\n", errno);
-		        printf("Error description is : %s\n",strerror(errno));
-				goto out1;
-			}
-			printf("Char dev %s opened \n", pathname);
-
-			usr_buf = (char *)mmap(NULL, BUF_TEST_SIZE, PROT_READ | PROT_WRITE, MAP_PRIVATE, chdev_fd, 0);
-
-			if(usr_buf == MAP_FAILED){
-				perror("mmap failed, Exiting...\n");
-				goto out2;
-			}
-			printf("Memory from char dev = %d mmaped to %p \n", chdev_fd, usr_buf);
-
-			read(pollfd.fd, &u, sizeof(uint64_t));
-			printf("Eventfd reset to 0\n");
-
-			break;
 		default:
 			if(pollfd.revents & POLLIN)
 			{
-				printf("Got POLLIN in revents\n");
-				clock_gettime( CLOCK_REALTIME, &time_start);
-				sleep(3);
-				clock_gettime( CLOCK_REALTIME, &time_stop);
-				//ioctl_set_msg(chdev_fd, NULL);
-				printf("Calculation done\n");
-				dtime = diff(time_start, time_stop);
-				printf("Time for this calculation = %ld\n",dtime.tv_sec*1000000000 + dtime.tv_nsec);
+				handle_polling(&pollfd);
+//				read(pollfd.fd, &u, sizeof(uint64_t));
+//				printf("Eventfd reset to 0 after mmap, value = %lu\n", u);
+//				printf("Got POLLIN in revents\n");
+//				clock_gettime( CLOCK_REALTIME, &time_start);
+//				sleep(3);
+//				clock_gettime( CLOCK_REALTIME, &time_stop);
+//				//ioctl_set_msg(chdev_fd, NULL);
+//				printf("Calculation done\n");
+//				dtime = diff(time_start, time_stop);
+//				printf("Time for this calculation = %ld\n",dtime.tv_sec*1000000000 + dtime.tv_nsec);
 			}
 		}
 	}
@@ -119,7 +144,7 @@ int main()
 //
 //	printf("new str = %s", str);
 out3:
-	munmap(usr_buf, BUF_TEST_SIZE);
+	munmap(buffer, BUF_TEST_SIZE);
 out2:
 	close(efd);
 out1:

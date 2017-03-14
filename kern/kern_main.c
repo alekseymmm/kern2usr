@@ -61,9 +61,7 @@ static int __set_usr_pid(const char *str, struct kernel_param *kp){
 		printk("Error while parsing usr_pid.\n");
 		return -1;
 	}
-	if(usr_pid != 0 && usr_efd != 0){
-		parse_usr_param();
-	}
+
 	return 0;
 }
 
@@ -78,9 +76,7 @@ static int __set_usr_efd(const char *str, struct kernel_param *kp){
 		printk("Error while parsing usr_efd.\n");
 		return -1;
 	}
-	if(usr_pid != 0 && usr_efd != 0){
-		parse_usr_param();
-	}
+
 	return 0;
 }
 
@@ -97,8 +93,23 @@ static int __set_cur_cmd(const char *str, struct kernel_param *kp){
 		return -1;
 	}
 
-	if(cur_cmd == 1){
-		eventfd_signal(efd_ctx, 1);
+	switch (cur_cmd){
+	case EFD_FIND:
+		parse_usr_param();
+		break;
+	case EFD_MMAP_CMD:
+		eventfd_signal(efd_ctx, EFD_MMAP_CMD);
+		break;
+	case EFD_START_TEST_CMD:
+		add_timer(&calc_timer);
+		printk("Timer is started.\n");
+		break;
+	case EFD_STOP_TEST_CMD:
+		del_timer_sync(&calc_timer);
+		printk("Timer is deleted.\n");
+		break;
+	default:
+		printk("Unsupported command.\n");
 	}
 
 	return 0;
@@ -162,13 +173,13 @@ static struct file_operations mmaptest_fops = {
 static void __timer_handler(unsigned long param)
 {
 	printk("Timer handler called\n");
-    
+   /*
 	if(!buffer_filled || calculation_done){
 		fill_buffer(buffer, BUF_TEST_SIZE);
 		//print_buf(buffer, BUF_TEST_SIZE);
 	}
 	printk("In handler: buffer_filled = %d, calculation_done = %d\n", buffer_filled, calculation_done);
-
+*/
 	//mod_timer(&calc_timer, jiffies + msecs_to_jiffies(5000));
 }
 
