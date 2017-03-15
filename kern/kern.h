@@ -18,12 +18,16 @@
 #define BUF_TEST_SIZE BUF_SIZE
 #define MAJOR_NUM 239
 
+#define TIMER_DELAY 3000
+
 #define EFD_FIND 1
 #define EFD_MMAP_CMD 2
 #define EFD_START_TEST_CMD 3
 #define EFD_STOP_TEST_CMD 4
-#define EFD_MEMORY_READY 5
-#define EFD_MEMORY_COPIED 6
+#define EFD_EXIT_TEST_CMD 5
+
+#define EFD_MEMORY_READY 6
+#define EFD_MEMORY_COPIED 7
 
 /* Set the message of the device driver */
 #define IOCTL_SET_MSG _IOR(MAJOR_NUM, 0, char *)

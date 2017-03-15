@@ -67,7 +67,7 @@ int do_mmap(char *pathname){
 	return 0;
 }
 
-void handle_polling(struct pollfd* pollfd)
+int handle_polling(struct pollfd* pollfd)
 {
 	uint64_t value = 0;
 	read(pollfd->fd, &value, sizeof(uint64_t));
@@ -85,14 +85,19 @@ void handle_polling(struct pollfd* pollfd)
 		printf("Eventfd reset to 0 after test stop\n");
 		break;
 	case EFD_MEMORY_READY:
-		printf("Eventfd notified that memory is ready, and set to 0\n");
+		//printf("Eventfd notified that memory is ready, and set to 0\n");
 		memcpy(dst_buffer, buffer, BUF_TEST_SIZE);
 		value = EFD_MEMORY_COPIED;
-		sleep(1);
+		//sleep(1);
 		write(efd2, &value, sizeof(uint64_t));
 		printf("Memory successfully copied and %d has been written to efd2\n", EFD_MEMORY_COPIED);
+		break;
+	case EFD_EXIT_TEST_CMD:
+		printf("Stop polling cmd received\n");
+		break;
 	}
 	printf("handling_polling done!\n");
+	return value;
 }
 
 
@@ -103,6 +108,8 @@ int main()
 	struct pollfd pollfd;
 	struct timespec time_start, time_stop, dtime;
 	struct timespec total_time;
+	uint64_t value = 0;
+	int stop_polling = 0;
 
 	dst_buffer = malloc(BUF_TEST_SIZE);
 	//create eventfd
@@ -127,7 +134,7 @@ int main()
 	printf("Start polling...\n");
 	fflush(stdout);
 
-	while(1){
+	while(!stop_polling){
 		result = poll(&pollfd, 1, timeout);
 		switch (result) {
 		case 0:
@@ -139,7 +146,10 @@ int main()
 		default:
 			if(pollfd.revents & POLLIN)
 			{
-				handle_polling(&pollfd);
+				value = handle_polling(&pollfd);
+				if(value == EFD_EXIT_TEST_CMD){
+					stop_polling = 1;
+				}
 //				read(pollfd.fd, &u, sizeof(uint64_t));
 //				printf("Eventfd reset to 0 after mmap, value = %lu\n", u);
 //				printf("Got POLLIN in revents\n");
@@ -164,6 +174,7 @@ out2:
 	close(chdev_fd);
 out1:
 	close(efd);
+	close(efd2);
 
 	free(dst_buffer);
 	printf("done!\n");

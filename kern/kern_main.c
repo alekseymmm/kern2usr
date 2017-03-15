@@ -48,8 +48,8 @@ long long int ktotal_time = 0;
 
 //Structs from userspace
 unsigned long usr_pid = 0;
-unsigned long usr_efd = 0;
-unsigned long usr_efd2 = 0;
+unsigned long usr_efd = 3;
+unsigned long usr_efd2 = 4;
 unsigned long cur_cmd = 0;
 
 //Structs to resolve references to fd
@@ -136,6 +136,12 @@ static int __set_cur_cmd(const char *str, struct kernel_param *kp){
 		testing_started = 0;
 		printk("Timer is deleted.\n");
 		eventfd_signal(efd_ctx, EFD_STOP_TEST_CMD);
+
+		eventfd_signal(efd_ctx2, EFD_STOP_TEST_CMD);
+		break;
+
+	case EFD_EXIT_TEST_CMD:
+		eventfd_signal(efd_ctx, EFD_EXIT_TEST_CMD);
 		break;
 
 	default:
@@ -205,16 +211,16 @@ static void __timer_handler(unsigned long param)
 	printk("Timer handler called\n");
 	printk("In handler: buffer_filled = %d, calculation_done = %d\n", buffer_filled, calculation_done);
 
-	//start monitoring for completion
-	printk("Start monitoring for efd2...\n");
-	queue_work(kern_wq, &work);
-
 	if(!buffer_filled || calculation_done){
+		//start monitoring for completion
+		printk("Start monitoring for efd2...\n");
+		queue_work(kern_wq, &work);
+
 		fill_buffer(buffer, BUF_TEST_SIZE);
 		//print_buf(buffer, BUF_TEST_SIZE);
 	}
 
-	mod_timer(&calc_timer, jiffies + msecs_to_jiffies(5000));
+	mod_timer(&calc_timer, jiffies + msecs_to_jiffies(TIMER_DELAY));
 }
 
 int parse_usr_param(){
@@ -243,27 +249,30 @@ int parse_usr_param(){
 }
 
 static void __monitor_efd2(struct work_struct *ws){
-//	struct tier_data *data = container_of(ws, struct tier_data, work);
+//	struct tier_data *damaketa = container_of(ws, struct tier_data, work);
 //	tier_swap_chunks(data);
 //	//TODO: Restart timer  or not ?
 //	mod_timer(&data->vs->timer, jiffies + msecs_to_jiffies(atomic_read(&data->vs->delay)));
 	uint64_t value = 0;
 	int res = 0;
-	printk("Monitoring efd2 run in  other thread.\n");
+	//printk("Monitoring efd2 run in  other thread.\n");
 
 	if(testing_started){
-		printk("In monitoring efd2  testing started  == 1 \n");
+		//printk("In monitoring efd2  testing started  == 1 \n");
 		res = eventfd_ctx_read(efd_ctx2, 0, &value);
 			if(res < 0){
 				printk("Error in eventfd_ctx_read : %d\n", res);
 			}
 			else{
-				printk("After eventfd_ctx_read  value = %llu\n", value);
+				//printk("After eventfd_ctx_read  value = %llu\n", value);
 				if(value == EFD_MEMORY_COPIED){
 					stop_time = ktime_to_ns(ktime_get());
 					printk("Time to copy = %llu\n", stop_time - start_time);
 					calculation_done = 1;
 					buffer_filled = 0;
+				}
+				if(value == EFD_STOP_TEST_CMD){
+					printk("monitoring efd2 stoped. \n");
 				}
 			}
 		}
@@ -295,7 +304,7 @@ static int __init_module ( void )
 	printk("Work queue created.\n");
 
 
-	calc_timer.expires = jiffies + msecs_to_jiffies(5000);
+	calc_timer.expires = jiffies + msecs_to_jiffies(TIMER_DELAY);
 	calc_timer.function = __timer_handler;
 	init_timer(&calc_timer);
 
@@ -310,12 +319,13 @@ static void __cleanup_module(void)
 {
 	del_timer_sync(&calc_timer);
 	printk("Calculation timer is stoped\n");
-
 	if(efd_ctx != NULL){
+		eventfd_signal(efd_ctx, EFD_STOP_TEST_CMD);
 		eventfd_ctx_put(efd_ctx);
 		printk("Put eventfd context\n");
 	}
 	if(efd_ctx2 != NULL){
+		eventfd_signal(efd_ctx2, EFD_STOP_TEST_CMD);
 		eventfd_ctx_put(efd_ctx2);
 		printk("Put eventfd context2\n");
 	}
