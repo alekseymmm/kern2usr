@@ -44,7 +44,7 @@ long long int start_time = 0, stop_time = 0;
 long long int total_time = 0;
 
 long long int kstart_time = 0, kstop_time = 0;
-long long int ktotal_time = 0;
+long long int ktotal_time = 0, num_tests = 0;
 
 //Structs from userspace
 unsigned long usr_pid = 0;
@@ -125,19 +125,31 @@ static int __set_cur_cmd(const char *str, struct kernel_param *kp){
 		break;
 
 	case EFD_START_TEST_CMD:
-		add_timer(&calc_timer);
 		testing_started = 1;
+		buffer_filled = 0;
+		calculation_done = 1;
+
+		add_timer(&calc_timer);
 		printk("Timer is started.\n");
+
+		ktotal_time = 0;
+		num_tests = 0;
 		eventfd_signal(efd_ctx, EFD_START_TEST_CMD);
 		break;
 
 	case EFD_STOP_TEST_CMD:
+		printk("Avg copy time = %llu\n", ktotal_time / num_tests);
+
 		del_timer_sync(&calc_timer);
-		testing_started = 0;
 		printk("Timer is deleted.\n");
+
+		testing_started = 0;
+		buffer_filled = 0;
+		calculation_done = 1;
+
 		eventfd_signal(efd_ctx, EFD_STOP_TEST_CMD);
 
-		eventfd_signal(efd_ctx2, EFD_STOP_TEST_CMD);
+		//eventfd_signal(efd_ctx2, EFD_STOP_TEST_CMD);
 		break;
 
 	case EFD_EXIT_TEST_CMD:
@@ -167,11 +179,12 @@ void fill_buffer(char *buf, unsigned long long len)
 	buffer_filled = 1;
 
 	calculation_done = 0;
+	kstart_time = ktime_to_ns(ktime_get());
 	eventfd_signal(efd_ctx, EFD_MEMORY_READY);
 	//wake_up_interruptible(&wq_buffer);
 	
 	printk("Buffer filled\n");
-	start_time = ktime_to_ns(ktime_get());
+
 }
 
 void release_buffer(char *buffer)
@@ -258,24 +271,32 @@ static void __monitor_efd2(struct work_struct *ws){
 	//printk("Monitoring efd2 run in  other thread.\n");
 
 	if(testing_started){
-		//printk("In monitoring efd2  testing started  == 1 \n");
-		res = eventfd_ctx_read(efd_ctx2, 0, &value);
-			if(res < 0){
-				printk("Error in eventfd_ctx_read : %d\n", res);
+//DO NOT DO THAT!
+//		res = -EAGAIN;
+//		while(res == -EAGAIN){
+//		//printk("In monitoring efd2  testing started  == 1 \n");
+//		res = eventfd_ctx_read(efd_ctx2, O_NONBLOCK, &value);
+	res = eventfd_ctx_read(efd_ctx2, 0, &value);
+		if(res < 0){
+			printk("Error in eventfd_ctx_read : %d\n", res);
+		}
+		else{
+			//printk("After eventfd_ctx_read  value = %llu\n", value);
+			if(value == EFD_MEMORY_COPIED){
+				kstop_time = ktime_to_ns(ktime_get());
+				printk("Time to copy = %llu\n", kstop_time - kstart_time);
+
+				calculation_done = 1;
+				buffer_filled = 0;
+				ktotal_time += kstop_time - kstart_time;
+				num_tests++;
+				printk("Avg copy time = %llu\n", ktotal_time / num_tests);
 			}
-			else{
-				//printk("After eventfd_ctx_read  value = %llu\n", value);
-				if(value == EFD_MEMORY_COPIED){
-					stop_time = ktime_to_ns(ktime_get());
-					printk("Time to copy = %llu\n", stop_time - start_time);
-					calculation_done = 1;
-					buffer_filled = 0;
-				}
-				if(value == EFD_STOP_TEST_CMD){
-					printk("monitoring efd2 stoped. \n");
-				}
+			if(value == EFD_STOP_TEST_CMD){
+				printk("monitoring efd2 stoped. \n");
 			}
 		}
+	}
 
 	printk("Exit from __monitor_efd2\n");
 }
@@ -294,6 +315,7 @@ static int __init_module ( void )
 	buffer = kmalloc(BUF_TEST_SIZE, GFP_KERNEL);
 	printk("Buffer allocated\n");
 	buffer_filled = 0;
+	calculation_done = 0;
 
 	kern_wq = create_singlethread_workqueue("Kern_WQ");
 	if(!kern_wq){

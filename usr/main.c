@@ -88,8 +88,10 @@ int handle_polling(struct pollfd* pollfd)
 		//printf("Eventfd notified that memory is ready, and set to 0\n");
 		memcpy(dst_buffer, buffer, BUF_TEST_SIZE);
 		value = EFD_MEMORY_COPIED;
-		//sleep(1);
+
 		write(efd2, &value, sizeof(uint64_t));
+		//ioctl_set_msg(chdev_fd, NULL);
+
 		printf("Memory successfully copied and %d has been written to efd2\n", EFD_MEMORY_COPIED);
 		break;
 	case EFD_EXIT_TEST_CMD:

@@ -34,7 +34,7 @@ extern long long int start_time , stop_time ;
 extern long long int total_time ;
 
 extern long long int kstart_time , kstop_time ;
-extern long long int ktotal_time ;
+extern long long int ktotal_time , num_tests;
 
 ssize_t mmaptest_read(struct file *filep, char *buffer, size_t len, loff_t *offset){
 //   int error_count = 0;
@@ -95,24 +95,26 @@ long mmaptest_ioctl(struct file *file,
 	switch (ioctl_num){
 	case IOCTL_SET_MSG:
 		calculation_done = 1;
-		stop_time = ktime_to_ns(ktime_get());
-		total_time += stop_time - start_time;
+		kstop_time = ktime_to_ns(ktime_get());
+		ktotal_time += kstop_time - kstart_time;
 		printk("got msg from user space in ioctl. Msg = %lu\n", ioctl_param);
 
 		//print_buf(buffer, BUF_TEST_SIZE);
 		printk("Calculcation done!!!\n");
-		printk("Time for this calculation(usr)= %lld\n", stop_time - start_time);
-		printk("Total time (usr)= %lld\n", total_time);
+		printk("Time for this calculation(usr)= %lld\n", kstop_time - kstart_time);
+		printk("Total time (usr)= %lld\n", ktotal_time);
+		num_tests++;
+		printk("Avg_time (usr) = %lld\n", ktotal_time / num_tests);
 
-		kstart_time = ktime_to_ns(ktime_get());
-		//kernel_fpu_begin();
-		//GF8_Calculation_2s(tmp_buffer, &dsc, 0, 0);
-		//kernel_fpu_end();
-		kstop_time = ktime_to_ns(ktime_get());
-		ktotal_time += kstop_time - kstart_time;
+//		kstart_time = ktime_to_ns(ktime_get());
+//		//kernel_fpu_begin();
+//		//GF8_Calculation_2s(tmp_buffer, &dsc, 0, 0);
+//		//kernel_fpu_end();
+//		kstop_time = ktime_to_ns(ktime_get());
+//		ktotal_time += kstop_time - kstart_time;
 
-		printk("Time for this calculation(kern)= %lld\n", kstop_time - kstart_time);
-		printk("Total time (kern)= %lld\n", ktotal_time);
+//		printk("Time for this calculation(kern)= %lld\n", kstop_time - kstart_time);
+//		printk("Total time (kern)= %lld\n", ktotal_time);
 
 		break;
 	case IOCTL_GET_MSG:
