@@ -1,4 +1,4 @@
-ccflags-y := -g -O0 -Wall -Werror\
+ccflags-y := -g0 -O0 -Wall -Werror\
  -mno-red-zone -mcmodel=kernel \
   -fno-dwarf2-cfi-asm
 

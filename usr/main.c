@@ -89,8 +89,8 @@ int handle_polling(struct pollfd* pollfd)
 		memcpy(dst_buffer, buffer, BUF_TEST_SIZE);
 		value = EFD_MEMORY_COPIED;
 
-		write(efd2, &value, sizeof(uint64_t));
-		//ioctl_set_msg(chdev_fd, NULL);
+		//write(efd2, &value, sizeof(uint64_t));
+		ioctl_set_msg(chdev_fd, NULL);
 
 		printf("Memory successfully copied and %d has been written to efd2\n", EFD_MEMORY_COPIED);
 		break;
@@ -114,29 +114,31 @@ int main()
 	int stop_polling = 0;
 
 	dst_buffer = malloc(BUF_TEST_SIZE);
-	//create eventfd
-	efd = eventfd(0, 0);
-	if(efd < 0){
-		printf("Unable to create evenfd. Exiting...\n");
-		goto out1;
+	chdev_fd = open("/dev/char/mmaptest", O_RDWR);
+	if(chdev_fd < 0)
+	{
+	    printf("failed to open /dev/char/mmaptest \n");
+	    goto out1;
 	}
-	printf("Eventfd created efd=%d pid=%d\n", efd, getpid());
+	printf("char dev =% d opened.\n", chdev_fd);
 
-	efd2 = eventfd(0, 0);
-	if(efd2 < 0){
-		printf("Unable to create 2nd evenfd. Exiting...\n");
-		goto out1;
-	}
-	printf("Eventfd created efd2=%d pid=%d\n", efd2, getpid());
-
-	pollfd.fd = efd;
+	pollfd.fd = chdev_fd;
 	pollfd.events = POLLIN;
 	//ioctl_set_msg(fd, NULL);
+
+	buffer = (char *)mmap(NULL, BUF_TEST_SIZE, PROT_READ | PROT_WRITE, MAP_PRIVATE, chdev_fd, 0);
+
+	if(buffer == MAP_FAILED){
+		perror("mmap failed, Exiting...\n");
+		close(chdev_fd);
+		goto out2;
+	}
+	printf("Memory from char dev = %d mmaped to %p \n", chdev_fd, buffer);
 
 	printf("Start polling...\n");
 	fflush(stdout);
 
-	while(!stop_polling){
+	while(1){
 		result = poll(&pollfd, 1, timeout);
 		switch (result) {
 		case 0:
@@ -148,35 +150,18 @@ int main()
 		default:
 			if(pollfd.revents & POLLIN)
 			{
-				value = handle_polling(&pollfd);
-				if(value == EFD_EXIT_TEST_CMD){
-					stop_polling = 1;
-				}
-//				read(pollfd.fd, &u, sizeof(uint64_t));
-//				printf("Eventfd reset to 0 after mmap, value = %lu\n", u);
-//				printf("Got POLLIN in revents\n");
-//				clock_gettime( CLOCK_REALTIME, &time_start);
-//				sleep(3);
-//				clock_gettime( CLOCK_REALTIME, &time_stop);
-//				//ioctl_set_msg(chdev_fd, NULL);
-//				printf("Calculation done\n");
-//				dtime = diff(time_start, time_stop);
-//				printf("Time for this calculation = %ld\n",dtime.tv_sec*1000000000 + dtime.tv_nsec);
+				memcpy(dst_buffer, buffer, BUF_TEST_SIZE);
+				ioctl_set_msg(chdev_fd, NULL);
+				printf("Calculation done\n");
 			}
 		}
 	}
-//	ioctl_set_msg(fd, (char *)123456);
-//	printf("Result: %s \n", str);
-//	strcpy(str, usr_str);
-//
-//	printf("new str = %s", str);
+
 out3:
 	munmap(buffer, BUF_TEST_SIZE);
 out2:
 	close(chdev_fd);
 out1:
-	close(efd);
-	close(efd2);
 
 	free(dst_buffer);
 	printf("done!\n");
