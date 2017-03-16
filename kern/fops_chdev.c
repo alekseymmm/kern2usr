@@ -25,7 +25,7 @@
 
 #include "kern.h"
 
-//extern wait_queue_head_t wq_buffer; //wait till the buffer filled;
+extern wait_queue_head_t wq_buffer; //wait till the buffer filled;
 extern char *buffer;
 extern int buffer_filled;
 extern int calculation_done;
@@ -101,20 +101,10 @@ long mmaptest_ioctl(struct file *file,
 
 		//print_buf(buffer, BUF_TEST_SIZE);
 		printk("Calculcation done!!!\n");
-		printk("Time for this calculation(usr)= %lld\n", kstop_time - kstart_time);
+		printk("Time for this copy = %lld\n", kstop_time - kstart_time);
 		printk("Total time (usr)= %lld\n", ktotal_time);
 		num_tests++;
 		printk("Avg_time (usr) = %lld\n", ktotal_time / num_tests);
-
-//		kstart_time = ktime_to_ns(ktime_get());
-//		//kernel_fpu_begin();
-//		//GF8_Calculation_2s(tmp_buffer, &dsc, 0, 0);
-//		//kernel_fpu_end();
-//		kstop_time = ktime_to_ns(ktime_get());
-//		ktotal_time += kstop_time - kstart_time;
-
-//		printk("Time for this calculation(kern)= %lld\n", kstop_time - kstart_time);
-//		printk("Total time (kern)= %lld\n", ktotal_time);
 
 		break;
 	case IOCTL_GET_MSG:
@@ -128,7 +118,7 @@ unsigned int mmaptest_poll(struct file *file, struct poll_table_struct *pwait)
 {
 	unsigned int mask = 0;
 
-	//poll_wait(file, &wq_buffer, pwait);
+	poll_wait(file, &wq_buffer, pwait);
 	//printk("In poll: buffer_filled = %d, calculation_done = %d\n", buffer_filled, calculation_done);
 
 	if(buffer_filled && !calculation_done){
