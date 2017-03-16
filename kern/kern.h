@@ -18,7 +18,7 @@
 #define BUF_TEST_SIZE BUF_SIZE
 #define MAJOR_NUM 239
 
-#define TIMER_DELAY 1000
+#define TIMER_DELAY 500
 
 #define EFD_FIND 1
 #define EFD_MMAP_CMD 2
