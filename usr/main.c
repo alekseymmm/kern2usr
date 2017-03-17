@@ -76,7 +76,7 @@ int handle_polling(struct pollfd* pollfd)
 	switch(value){
 	case EFD_MMAP_CMD:
 		printf("Got mmap command in polling eventfd\n");
-		do_mmap(pathname);
+		//do_mmap(pathname);
 		break;
 	case EFD_START_TEST_CMD:
 		printf("Eventfd reset to 0 after test start\n");
@@ -90,9 +90,9 @@ int handle_polling(struct pollfd* pollfd)
 		value = EFD_MEMORY_COPIED;
 
 		write(efd2, &value, sizeof(uint64_t));
-		//ioctl_set_msg(chdev_fd, NULL);
+		//////ioctl_set_msg(chdev_fd, NULL);
 
-		printf("Memory successfully copied and %d has been written to efd2\n", EFD_MEMORY_COPIED);
+		//printf("Memory successfully copied and %d has been written to efd2\n", EFD_MEMORY_COPIED);
 		break;
 	case EFD_EXIT_TEST_CMD:
 		printf("Stop polling cmd received\n");
@@ -114,6 +114,8 @@ int main()
 	int stop_polling = 0;
 
 	dst_buffer = malloc(BUF_TEST_SIZE);
+	printf("dst_buffer in user space = %p\n", dst_buffer);
+
 	//create eventfd
 	efd = eventfd(0, 0);
 	if(efd < 0){

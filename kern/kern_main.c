@@ -33,6 +33,8 @@ struct workqueue_struct *kern_wq = NULL;
 struct work_struct  work;   /**< Used to redirect to a different thread */
 
 char *buffer;
+char *usr_buffer = NULL;
+
 int buffer_filled = 0;
 int calculation_done = 0;
 int testing_started = 0;
@@ -167,6 +169,22 @@ static int __get_cur_cmd(char *buffer, struct kernel_param *kp){
 	return scnprintf(buffer, PAGE_SIZE, "%lu", cur_cmd);
 }
 
+
+static int __get_usr_buffer(char *buffer, struct kernel_param *kp){
+	return scnprintf(buffer, PAGE_SIZE, "%lu", usr_pid);
+}
+
+static int __set_usr_buffer(const char *str, struct kernel_param *kp){
+	int retval;
+	retval = kstrtou64(str, 16, (uint64_t *)&usr_buffer);
+	if(retval < 0){
+		printk("Error while parsing usr address.\n");
+		return -1;
+	}
+	printk("Set usr_buffer to %p\n", usr_buffer);
+
+	return 0;
+}
 void fill_buffer(char *buf, unsigned long long len)
 {
 	int i;
@@ -180,6 +198,10 @@ void fill_buffer(char *buf, unsigned long long len)
 
 	calculation_done = 0;
 	kstart_time = ktime_to_ns(ktime_get());
+	printk("Going to copy 4096 bytes from %p in kernel to %p in usr\n", buffer, usr_buffer);
+	if(copy_to_user(usr_buffer, buffer, BUF_TEST_SIZE)){
+		printk("Failed to copy to usr buffer = %p\n", usr_buffer);
+	}
 	eventfd_signal(efd_ctx, EFD_MEMORY_READY);
 	//wake_up_interruptible(&wq_buffer);
 	
@@ -374,8 +396,11 @@ module_param_call(usr_efd, __set_usr_efd, __get_usr_efd, NULL, S_IRUGO | S_IWUSR
 MODULE_PARM_DESC(usr_efd2, "Userspace eventfd for cope done notification");
 module_param_call(usr_efd2, __set_usr_efd2, __get_usr_efd2, NULL, S_IRUGO | S_IWUSR);
 
-MODULE_PARM_DESC(_cur_cmd, "Cmd to execute");
+MODULE_PARM_DESC(cur_cmd, "Cmd to execute");
 module_param_call(cur_cmd, __set_cur_cmd, __get_cur_cmd, NULL, S_IRUGO | S_IWUSR);
+
+MODULE_PARM_DESC(usr_buffer, "User space address");
+module_param_call(usr_buffer, __set_usr_buffer, __get_usr_buffer, NULL, S_IRUGO | S_IWUSR);
 
 MODULE_AUTHOR("AM");
 
