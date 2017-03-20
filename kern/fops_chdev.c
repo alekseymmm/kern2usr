@@ -92,6 +92,8 @@ int mmaptest_release(struct inode *inode, struct file *filp){
 
 long mmaptest_ioctl(struct file *file,
 		unsigned int ioctl_num, unsigned long ioctl_param){
+	char *usr_buffer = NULL;
+
 	switch (ioctl_num){
 	case IOCTL_SET_MSG:
 		calculation_done = 1;
@@ -106,19 +108,29 @@ long mmaptest_ioctl(struct file *file,
 		num_tests++;
 		printk("Avg_time (usr) = %lld\n", ktotal_time / num_tests);
 
-//		kstart_time = ktime_to_ns(ktime_get());
-//		//kernel_fpu_begin();
-//		//GF8_Calculation_2s(tmp_buffer, &dsc, 0, 0);
-//		//kernel_fpu_end();
-//		kstop_time = ktime_to_ns(ktime_get());
-//		ktotal_time += kstop_time - kstart_time;
-
-//		printk("Time for this calculation(kern)= %lld\n", kstop_time - kstart_time);
-//		printk("Total time (kern)= %lld\n", ktotal_time);
-
 		break;
-	case IOCTL_GET_MSG:
-		printk("set msg for user space in ioctl. Msg = %lu\n", ioctl_param);
+	case IOCTL_GET_BUFFER:
+		printk("set buffer for user space in ioctl. usr_buffer = %lu\n", ioctl_param);
+		usr_buffer = (char *)ioctl_param;
+		printk("Going to copy 4096 bytes from %p in kernel to %p in usr\n", buffer, usr_buffer);
+		if(copy_to_user(usr_buffer, buffer, BUF_TEST_SIZE)){
+			printk("Failed to copy to usr buffer = %p\n", usr_buffer);
+			return -1;
+		}
+
+		calculation_done = 1;
+		buffer_filled = 0;
+		kstop_time = ktime_to_ns(ktime_get());
+		ktotal_time += kstop_time - kstart_time;
+		printk("got msg from user space in ioctl. Msg = %lu\n", ioctl_param);
+
+		//print_buf(buffer, BUF_TEST_SIZE);
+		printk("Calculcation done!!!\n");
+		printk("Time for this calculation(usr)= %lld\n", kstop_time - kstart_time);
+		printk("Total time (usr)= %lld\n", ktotal_time);
+		num_tests++;
+		printk("Avg_time (usr) = %lld\n", ktotal_time / num_tests);
+
 		break;
 	}
 	return 0;

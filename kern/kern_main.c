@@ -198,10 +198,7 @@ void fill_buffer(char *buf, unsigned long long len)
 
 	calculation_done = 0;
 	kstart_time = ktime_to_ns(ktime_get());
-	printk("Going to copy 4096 bytes from %p in kernel to %p in usr\n", buffer, usr_buffer);
-	if(copy_to_user(usr_buffer, buffer, BUF_TEST_SIZE)){
-		printk("Failed to copy to usr buffer = %p\n", usr_buffer);
-	}
+
 	eventfd_signal(efd_ctx, EFD_MEMORY_READY);
 	//wake_up_interruptible(&wq_buffer);
 	
@@ -226,9 +223,6 @@ void print_buf(char *buf, int len)
 	}
 	printk("\n");
 }
-//static char *test_str = "Test string from module\n";
-
-
 
 // vfs methods
 static struct file_operations mmaptest_fops = {
@@ -249,10 +243,8 @@ static void __timer_handler(unsigned long param)
 	if(!buffer_filled || calculation_done){
 		//start monitoring for completion
 		printk("Start monitoring for efd2...\n");
-		queue_work(kern_wq, &work);
 
 		fill_buffer(buffer, BUF_TEST_SIZE);
-		//print_buf(buffer, BUF_TEST_SIZE);
 	}
 
 	mod_timer(&calc_timer, jiffies + msecs_to_jiffies(TIMER_DELAY));

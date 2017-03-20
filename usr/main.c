@@ -43,26 +43,14 @@ int ioctl_set_msg(int file_dsc, char *message)
 }
 
 int do_mmap(char *pathname){
-	chdev_fd = open(pathname, O_RDWR);
-	if(chdev_fd < 0)
-	{
-		printf("Failed to open %s \n", pathname);
-	    printf("Error no is : %d\n", errno);
-	    printf("Error description is : %s\n",strerror(errno));
-	    return -1;
-	}
-	else {
-		printf("Char dev %s opened \n", pathname);
+	buffer = (char *)mmap(NULL, BUF_TEST_SIZE, PROT_READ | PROT_WRITE, MAP_PRIVATE, chdev_fd, 0);
 
-		buffer = (char *)mmap(NULL, BUF_TEST_SIZE, PROT_READ | PROT_WRITE, MAP_PRIVATE, chdev_fd, 0);
-
-		if(buffer == MAP_FAILED){
-			perror("mmap failed, Exiting...\n");
-			close(chdev_fd);
-			return -1;
-		}
-		printf("Memory from char dev = %d mmaped to %p \n", chdev_fd, buffer);
+	if(buffer == MAP_FAILED){
+		perror("mmap failed, Exiting...\n");
+		close(chdev_fd);
+		return -1;
 	}
+	printf("Memory from char dev = %d mmaped to %p \n", chdev_fd, buffer);
 
 	return 0;
 }
@@ -70,6 +58,7 @@ int do_mmap(char *pathname){
 int handle_polling(struct pollfd* pollfd)
 {
 	uint64_t value = 0;
+	int ret = 0;
 	read(pollfd->fd, &value, sizeof(uint64_t));
 
 	printf("In handling_polling value in eventfd = %lu\n", value);
@@ -85,13 +74,14 @@ int handle_polling(struct pollfd* pollfd)
 		printf("Eventfd reset to 0 after test stop\n");
 		break;
 	case EFD_MEMORY_READY:
-		//printf("Eventfd notified that memory is ready, and set to 0\n");
-		memcpy(dst_buffer, buffer, BUF_TEST_SIZE);
-		value = EFD_MEMORY_COPIED;
+		printf("call ioctl to copy data to %p\n", dst_buffer);
+		ret = ioctl(chdev_fd, IOCTL_GET_BUFFER, dst_buffer);
 
-		write(efd2, &value, sizeof(uint64_t));
-		//////ioctl_set_msg(chdev_fd, NULL);
-
+		if(ret){
+			printf("Error while copying in ioctl : %d\n", ret);
+			break;
+		}
+		printf("data copied\n");
 		//printf("Memory successfully copied and %d has been written to efd2\n", EFD_MEMORY_COPIED);
 		break;
 	case EFD_EXIT_TEST_CMD:
@@ -101,7 +91,6 @@ int handle_polling(struct pollfd* pollfd)
 	printf("handling_polling done!\n");
 	return value;
 }
-
 
 int main()
 {
@@ -134,6 +123,17 @@ int main()
 	pollfd.fd = efd;
 	pollfd.events = POLLIN;
 	//ioctl_set_msg(fd, NULL);
+
+	chdev_fd = open(pathname, O_RDWR);
+	if(chdev_fd < 0)
+	{
+		printf("Failed to open %s \n", pathname);
+	    printf("Error no is : %d\n", errno);
+	    printf("Error description is : %s\n",strerror(errno));
+	    goto out2;
+	}
+
+	printf("Char dev %s opened \n", pathname);
 
 	printf("Start polling...\n");
 	fflush(stdout);

@@ -47,7 +47,7 @@
  */
 
 /* Get the message of the device driver */
-#define IOCTL_GET_MSG _IOR(MAJOR_NUM, 1, char *)
+#define IOCTL_GET_BUFFER _IOR(MAJOR_NUM, 1, char *)
  /* This IOCTL is used for output, to get the message
   * of the device driver. However, we still need the
   * buffer to place the message in to be input,
