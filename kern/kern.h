@@ -31,7 +31,7 @@
 #define EFD_MEMORY_COPIED 7
 
 /* Set the message of the device driver */
-#define IOCTL_SET_MSG _IOR(MAJOR_NUM, 0, char *)
+#define IOCTL_USR_COPY_DONE _IOR(MAJOR_NUM, 0, char *)
 /* _IOR means that we're creating an ioctl command
  * number for passing information from a user process
  * to the kernel module.

@@ -95,7 +95,7 @@ long mmaptest_ioctl(struct file *file,
 	char *usr_buffer = NULL;
 
 	switch (ioctl_num){
-	case IOCTL_SET_MSG:
+	case IOCTL_USR_COPY_DONE:
 		calculation_done = 1;
 		kstop_time = ktime_to_ns(ktime_get());
 		ktotal_time += kstop_time - kstart_time;
@@ -110,9 +110,9 @@ long mmaptest_ioctl(struct file *file,
 
 		break;
 	case IOCTL_GET_BUFFER:
-		printk("set buffer for user space in ioctl. usr_buffer = %lu\n", ioctl_param);
+		//printk("set buffer for user space in ioctl. usr_buffer = %lu\n", ioctl_param);
 		usr_buffer = (char *)ioctl_param;
-		printk("Going to copy 4096 bytes from %p in kernel to %p in usr\n", buffer, usr_buffer);
+		//printk("Going to copy 4096 bytes from %p in kernel to %p in usr\n", buffer, usr_buffer);
 		if(copy_to_user(usr_buffer, buffer, BUF_TEST_SIZE)){
 			printk("Failed to copy to usr buffer = %p\n", usr_buffer);
 			return -1;
@@ -122,9 +122,8 @@ long mmaptest_ioctl(struct file *file,
 		buffer_filled = 0;
 		kstop_time = ktime_to_ns(ktime_get());
 		ktotal_time += kstop_time - kstart_time;
-		printk("got msg from user space in ioctl. Msg = %lu\n", ioctl_param);
+		printk("In ioctl %d bytes copied to user address = %p \n", BUF_TEST_SIZE,  usr_buffer);
 
-		//print_buf(buffer, BUF_TEST_SIZE);
 		printk("Calculcation done!!!\n");
 		printk("Time for this calculation(usr)= %lld\n", kstop_time - kstart_time);
 		printk("Total time (usr)= %lld\n", ktotal_time);

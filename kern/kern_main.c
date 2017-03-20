@@ -28,10 +28,6 @@
 #include "kern.h"
 #include "fops_chdev.h"
 
-/** Internal workqueue */
-struct workqueue_struct *kern_wq = NULL;
-struct work_struct  work;   /**< Used to redirect to a different thread */
-
 char *buffer;
 char *usr_buffer = NULL;
 
@@ -62,7 +58,6 @@ struct eventfd_ctx *efd_ctx = NULL;			//ptr to eventfd context
 struct eventfd_ctx *efd_ctx2 = NULL;			//ptr to eventfd context
 
 int parse_usr_param(void);
-static void __monitor_efd2(struct work_struct *ws);
 
 static int __set_usr_pid(const char *str, struct kernel_param *kp){
 	int retval;
@@ -151,7 +146,6 @@ static int __set_cur_cmd(const char *str, struct kernel_param *kp){
 
 		eventfd_signal(efd_ctx, EFD_STOP_TEST_CMD);
 
-		//eventfd_signal(efd_ctx2, EFD_STOP_TEST_CMD);
 		break;
 
 	case EFD_EXIT_TEST_CMD:
@@ -170,21 +164,6 @@ static int __get_cur_cmd(char *buffer, struct kernel_param *kp){
 }
 
 
-static int __get_usr_buffer(char *buffer, struct kernel_param *kp){
-	return scnprintf(buffer, PAGE_SIZE, "%lu", usr_pid);
-}
-
-static int __set_usr_buffer(const char *str, struct kernel_param *kp){
-	int retval;
-	retval = kstrtou64(str, 16, (uint64_t *)&usr_buffer);
-	if(retval < 0){
-		printk("Error while parsing usr address.\n");
-		return -1;
-	}
-	printk("Set usr_buffer to %p\n", usr_buffer);
-
-	return 0;
-}
 void fill_buffer(char *buf, unsigned long long len)
 {
 	int i;
@@ -275,46 +254,6 @@ int parse_usr_param(){
 	return 0;
 }
 
-static void __monitor_efd2(struct work_struct *ws){
-//	struct tier_data *damaketa = container_of(ws, struct tier_data, work);
-//	tier_swap_chunks(data);
-//	//TODO: Restart timer  or not ?
-//	mod_timer(&data->vs->timer, jiffies + msecs_to_jiffies(atomic_read(&data->vs->delay)));
-	uint64_t value = 0;
-	int res = 0;
-	//printk("Monitoring efd2 run in  other thread.\n");
-
-	if(testing_started){
-//DO NOT DO THAT!
-//		res = -EAGAIN;
-//		while(res == -EAGAIN){
-//		//printk("In monitoring efd2  testing started  == 1 \n");
-//		res = eventfd_ctx_read(efd_ctx2, O_NONBLOCK, &value);
-	res = eventfd_ctx_read(efd_ctx2, 0, &value);
-		if(res < 0){
-			printk("Error in eventfd_ctx_read : %d\n", res);
-		}
-		else{
-			//printk("After eventfd_ctx_read  value = %llu\n", value);
-			if(value == EFD_MEMORY_COPIED){
-				kstop_time = ktime_to_ns(ktime_get());
-				printk("Time to copy = %llu\n", kstop_time - kstart_time);
-
-				calculation_done = 1;
-				buffer_filled = 0;
-				ktotal_time += kstop_time - kstart_time;
-				num_tests++;
-				printk("Avg copy time = %llu\n", ktotal_time / num_tests);
-			}
-			if(value == EFD_STOP_TEST_CMD){
-				printk("monitoring efd2 stoped. \n");
-			}
-		}
-	}
-
-	printk("Exit from __monitor_efd2\n");
-}
-
 static int __init_module ( void )
 {
 	printk("module started...\n");
@@ -327,28 +266,19 @@ static int __init_module ( void )
 	printk("Char dev with Major = %d was created\n", MAJOR_NUM);
 
 	buffer = kmalloc(BUF_TEST_SIZE, GFP_KERNEL);
+	if(!buffer){
+		printk("Buffer allocation error.\n");
+		return -1;
+	}
 	printk("Buffer allocated\n");
 	buffer_filled = 0;
 	calculation_done = 0;
-
-	kern_wq = create_singlethread_workqueue("Kern_WQ");
-	if(!kern_wq){
-	   	printk("Cold not create the kern workqueue!\n");
-	   	goto out;
-	}
-	INIT_WORK(&work, __monitor_efd2);
-	printk("Work queue created.\n");
-
 
 	calc_timer.expires = jiffies + msecs_to_jiffies(TIMER_DELAY);
 	calc_timer.function = __timer_handler;
 	init_timer(&calc_timer);
 
 	return 0;
-
-out:
-	kfree(buffer);
-	return -1;
 }
 
 static void __cleanup_module(void)
@@ -365,8 +295,6 @@ static void __cleanup_module(void)
 		eventfd_ctx_put(efd_ctx2);
 		printk("Put eventfd context2\n");
 	}
-	destroy_workqueue(kern_wq);
-	printk("Work queue destroyed.\n");
 
 	release_buffer(buffer);
 	printk("Buffer released.\n");
@@ -390,9 +318,6 @@ module_param_call(usr_efd2, __set_usr_efd2, __get_usr_efd2, NULL, S_IRUGO | S_IW
 
 MODULE_PARM_DESC(cur_cmd, "Cmd to execute");
 module_param_call(cur_cmd, __set_cur_cmd, __get_cur_cmd, NULL, S_IRUGO | S_IWUSR);
-
-MODULE_PARM_DESC(usr_buffer, "User space address");
-module_param_call(usr_buffer, __set_usr_buffer, __get_usr_buffer, NULL, S_IRUGO | S_IWUSR);
 
 MODULE_AUTHOR("AM");
 

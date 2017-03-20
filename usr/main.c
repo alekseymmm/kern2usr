@@ -21,7 +21,7 @@
 
 #include "kern/kern.h"
 #include "utils.h"
-//#include "engine.h"
+
 
 int chdev_fd;
 int efd;
@@ -29,31 +29,6 @@ int efd2;
 char *pathname = "/dev/char/mmaptest";;
 char *buffer = NULL;
 char *dst_buffer = NULL;
-
-int ioctl_set_msg(int file_dsc, char *message)
-{
-	int ret_val;
-
-	ret_val = ioctl(file_dsc, IOCTL_SET_MSG, message);
-	if(ret_val < 0){
-		printf("ioctl_set_msg failed %d\n",ret_val);
-		return -1;
-	}
-	return 0;
-}
-
-int do_mmap(char *pathname){
-	buffer = (char *)mmap(NULL, BUF_TEST_SIZE, PROT_READ | PROT_WRITE, MAP_PRIVATE, chdev_fd, 0);
-
-	if(buffer == MAP_FAILED){
-		perror("mmap failed, Exiting...\n");
-		close(chdev_fd);
-		return -1;
-	}
-	printf("Memory from char dev = %d mmaped to %p \n", chdev_fd, buffer);
-
-	return 0;
-}
 
 int handle_polling(struct pollfd* pollfd)
 {
@@ -74,7 +49,7 @@ int handle_polling(struct pollfd* pollfd)
 		printf("Eventfd reset to 0 after test stop\n");
 		break;
 	case EFD_MEMORY_READY:
-		printf("call ioctl to copy data to %p\n", dst_buffer);
+		//printf("call ioctl to copy data to %p\n", dst_buffer);
 		ret = ioctl(chdev_fd, IOCTL_GET_BUFFER, dst_buffer);
 
 		if(ret){
@@ -82,7 +57,7 @@ int handle_polling(struct pollfd* pollfd)
 			break;
 		}
 		printf("data copied\n");
-		//printf("Memory successfully copied and %d has been written to efd2\n", EFD_MEMORY_COPIED);
+
 		break;
 	case EFD_EXIT_TEST_CMD:
 		printf("Stop polling cmd received\n");
@@ -122,7 +97,6 @@ int main()
 
 	pollfd.fd = efd;
 	pollfd.events = POLLIN;
-	//ioctl_set_msg(fd, NULL);
 
 	chdev_fd = open(pathname, O_RDWR);
 	if(chdev_fd < 0)
@@ -140,6 +114,7 @@ int main()
 
 	while(!stop_polling){
 		result = poll(&pollfd, 1, timeout);
+
 		switch (result) {
 		case 0:
 			printf("timeout in polling\n");
@@ -154,24 +129,10 @@ int main()
 				if(value == EFD_EXIT_TEST_CMD){
 					stop_polling = 1;
 				}
-//				read(pollfd.fd, &u, sizeof(uint64_t));
-//				printf("Eventfd reset to 0 after mmap, value = %lu\n", u);
-//				printf("Got POLLIN in revents\n");
-//				clock_gettime( CLOCK_REALTIME, &time_start);
-//				sleep(3);
-//				clock_gettime( CLOCK_REALTIME, &time_stop);
-//				//ioctl_set_msg(chdev_fd, NULL);
-//				printf("Calculation done\n");
-//				dtime = diff(time_start, time_stop);
-//				printf("Time for this calculation = %ld\n",dtime.tv_sec*1000000000 + dtime.tv_nsec);
 			}
 		}
 	}
-//	ioctl_set_msg(fd, (char *)123456);
-//	printf("Result: %s \n", str);
-//	strcpy(str, usr_str);
-//
-//	printf("new str = %s", str);
+
 out3:
 	munmap(buffer, BUF_TEST_SIZE);
 out2:
