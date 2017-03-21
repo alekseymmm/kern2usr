@@ -16,6 +16,7 @@
 #include <sys/ioctl.h>
 #include <sys/poll.h>
 #include <sys/eventfd.h>
+#include <sched.h>
 
 #include <errno.h>
 
@@ -30,41 +31,36 @@ char *pathname = "/dev/char/mmaptest";;
 char *buffer = NULL;
 char *dst_buffer = NULL;
 
-int handle_polling(struct pollfd* pollfd)
+int handle_polling(uint64_t value)
 {
-	uint64_t value = 0;
 	int ret = 0;
-	read(pollfd->fd, &value, sizeof(uint64_t));
 
-	printf("In handling_polling value in eventfd = %lu\n", value);
 	switch(value){
-	case EFD_MMAP_CMD:
-		printf("Got mmap command in polling eventfd\n");
-		//do_mmap(pathname);
-		break;
 	case EFD_START_TEST_CMD:
-		printf("Eventfd reset to 0 after test start\n");
+		printf("Test started\n");
 		break;
 	case EFD_STOP_TEST_CMD:
-		printf("Eventfd reset to 0 after test stop\n");
+		printf("Test stoped\n");
+		break;
+	case EFD_EXIT_TEST_CMD:
+		printf("Test exit\n");
 		break;
 	case EFD_MEMORY_READY:
-		//printf("call ioctl to copy data to %p\n", dst_buffer);
 		ret = ioctl(chdev_fd, IOCTL_GET_BUFFER, dst_buffer);
 
 		if(ret){
 			printf("Error while copying in ioctl : %d\n", ret);
-			break;
+			return -1;
 		}
 		printf("data copied\n");
 
+		printf("handling_polling done on CPU: %d, PID: %d\n", sched_getcpu(), getpid());
 		break;
-	case EFD_EXIT_TEST_CMD:
-		printf("Stop polling cmd received\n");
+	default:
+		printf("Unsupported command.\n");
 		break;
 	}
-	printf("handling_polling done!\n");
-	return value;
+	return 0;
 }
 
 int main()
@@ -72,8 +68,6 @@ int main()
 	//int result, timeout = 1000000;
 	int result, timeout = 10000;
 	struct pollfd pollfd;
-	struct timespec time_start, time_stop, dtime;
-	struct timespec total_time;
 	uint64_t value = 0;
 	int stop_polling = 0;
 
@@ -87,13 +81,6 @@ int main()
 		goto out1;
 	}
 	printf("Eventfd created efd=%d pid=%d\n", efd, getpid());
-
-	efd2 = eventfd(0, 0);
-	if(efd2 < 0){
-		printf("Unable to create 2nd evenfd. Exiting...\n");
-		goto out1;
-	}
-	printf("Eventfd created efd2=%d pid=%d\n", efd2, getpid());
 
 	pollfd.fd = efd;
 	pollfd.events = POLLIN;
@@ -109,37 +96,33 @@ int main()
 
 	printf("Char dev %s opened \n", pathname);
 
-	printf("Start polling...\n");
+	printf("Start polling on CPU: %d, PID: %d ...\n", sched_getcpu(), getpid());
 	fflush(stdout);
 
 	while(!stop_polling){
-		result = poll(&pollfd, 1, timeout);
+		result = read(efd, &value, sizeof(uint64_t));
 
 		switch (result) {
 		case 0:
 			printf("timeout in polling\n");
 			break;
 		case -1:
+
 			printf("poll error -1. Exiting...\n");
-			goto out3;
+			goto out2;
 		default:
-			if(pollfd.revents & POLLIN)
-			{
-				value = handle_polling(&pollfd);
-				if(value == EFD_EXIT_TEST_CMD){
-					stop_polling = 1;
-				}
+			handle_polling(value);
+			if(value == EFD_EXIT_TEST_CMD){
+				stop_polling = 1;
 			}
+
 		}
 	}
 
-out3:
-	munmap(buffer, BUF_TEST_SIZE);
 out2:
 	close(chdev_fd);
 out1:
 	close(efd);
-	close(efd2);
 
 	free(dst_buffer);
 	printf("done!\n");

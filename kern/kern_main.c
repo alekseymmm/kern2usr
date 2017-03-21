@@ -47,15 +47,12 @@ long long int ktotal_time = 0, num_tests = 0;
 //Structs from userspace
 unsigned long usr_pid = 0;
 unsigned long usr_efd = 3;
-unsigned long usr_efd2 = 4;
 unsigned long cur_cmd = 0;
 
 //Structs to resolve references to fd
 struct task_struct *userspace_task = NULL;	//ptr to usr space task struct
 struct file *efd_file = NULL;				//ptr to eventfd's file struct
-struct file *efd_file2 = NULL;				//ptr to eventfd's file struct
 struct eventfd_ctx *efd_ctx = NULL;			//ptr to eventfd context
-struct eventfd_ctx *efd_ctx2 = NULL;			//ptr to eventfd context
 
 int parse_usr_param(void);
 
@@ -89,21 +86,6 @@ static int __get_usr_efd(char *buffer, struct kernel_param *kp){
 	return scnprintf(buffer, PAGE_SIZE, "%lu", usr_efd);
 }
 
-static int __set_usr_efd2(const char *str, struct kernel_param *kp){
-	int retval;
-	retval = kstrtoul(str, 10, &usr_efd2);
-	if(retval < 0){
-		printk("Error while parsing usr_efd2.\n");
-		return -1;
-	}
-
-	return 0;
-}
-
-static int __get_usr_efd2(char *buffer, struct kernel_param *kp){
-	return scnprintf(buffer, PAGE_SIZE, "%lu", usr_efd2);
-}
-
 static int __set_cur_cmd(const char *str, struct kernel_param *kp){
 	int retval;
 	retval = kstrtoul(str, 10, &cur_cmd);
@@ -135,7 +117,9 @@ static int __set_cur_cmd(const char *str, struct kernel_param *kp){
 		break;
 
 	case EFD_STOP_TEST_CMD:
-		printk("Avg copy time = %llu\n", ktotal_time / num_tests);
+		if(num_tests != 0){
+			printk("Avg copy time = %llu\n", ktotal_time / num_tests);
+		}
 
 		del_timer_sync(&calc_timer);
 		printk("Timer is deleted.\n");
@@ -149,6 +133,7 @@ static int __set_cur_cmd(const char *str, struct kernel_param *kp){
 		break;
 
 	case EFD_EXIT_TEST_CMD:
+		del_timer_sync(&calc_timer);
 		eventfd_signal(efd_ctx, EFD_EXIT_TEST_CMD);
 		break;
 
@@ -216,13 +201,10 @@ static struct file_operations mmaptest_fops = {
 
 static void __timer_handler(unsigned long param)
 {
-	printk("Timer handler called\n");
+	printk("Timer handler called on CPU: %d\n", smp_processor_id());
 	printk("In handler: buffer_filled = %d, calculation_done = %d\n", buffer_filled, calculation_done);
 
 	if(!buffer_filled || calculation_done){
-		//start monitoring for completion
-		printk("Start monitoring for efd2...\n");
-
 		fill_buffer(buffer, BUF_TEST_SIZE);
 	}
 
@@ -231,26 +213,26 @@ static void __timer_handler(unsigned long param)
 
 int parse_usr_param(){
 	//parse userspace argumetns to find efd
-	printk("Received from userspace: usr_pid=%lu, efd=%lu, efd2=%lu\n", usr_pid, usr_efd, usr_efd2);
+	printk("Received from userspace: usr_pid=%lu, efd=%lu\n", usr_pid, usr_efd);
 
 	userspace_task = pid_task(find_vpid(usr_pid), PIDTYPE_PID);
 	printk("Resolved pointer to the userspace program task struct: %p\n",userspace_task);
 
 	rcu_read_lock();
 	efd_file = fcheck_files(userspace_task->files, usr_efd);
-	efd_file2 = fcheck_files(userspace_task->files, usr_efd2);
+
 	rcu_read_unlock();
 
-	printk("Resolved pointer to the userspace program's eventfd's file struct: %p and struct2 : %p\n",efd_file, efd_file2);
+	printk("Resolved pointer to the userspace program's eventfd's file struct: %p\n",efd_file);
 
 	efd_ctx = eventfd_ctx_fileget(efd_file);
-	efd_ctx2 = eventfd_ctx_fileget(efd_file2);
-	if(!efd_ctx || !efd_ctx2){
+
+	if(!efd_ctx){
 		printk("eventfd_ctx_fileget() failed..\n");
 		unregister_chrdev(Major, DEVICE_NAME);
 		return -1;
 	}
-	printk("Resolved pointer to the userspace program's eventfd's context: %p and context2 : %p\n", efd_ctx, efd_ctx2);
+	printk("Resolved pointer to the userspace program's eventfd's context: %p \n", efd_ctx);
 	return 0;
 }
 
@@ -290,11 +272,6 @@ static void __cleanup_module(void)
 		eventfd_ctx_put(efd_ctx);
 		printk("Put eventfd context\n");
 	}
-	if(efd_ctx2 != NULL){
-		eventfd_signal(efd_ctx2, EFD_STOP_TEST_CMD);
-		eventfd_ctx_put(efd_ctx2);
-		printk("Put eventfd context2\n");
-	}
 
 	release_buffer(buffer);
 	printk("Buffer released.\n");
@@ -312,9 +289,6 @@ module_param_call(usr_pid, __set_usr_pid, __get_usr_pid, NULL, S_IRUGO | S_IWUSR
 
 MODULE_PARM_DESC(usr_efd, "Userspace eventfd to monitor");
 module_param_call(usr_efd, __set_usr_efd, __get_usr_efd, NULL, S_IRUGO | S_IWUSR);
-
-MODULE_PARM_DESC(usr_efd2, "Userspace eventfd for cope done notification");
-module_param_call(usr_efd2, __set_usr_efd2, __get_usr_efd2, NULL, S_IRUGO | S_IWUSR);
 
 MODULE_PARM_DESC(cur_cmd, "Cmd to execute");
 module_param_call(cur_cmd, __set_cur_cmd, __get_cur_cmd, NULL, S_IRUGO | S_IWUSR);
