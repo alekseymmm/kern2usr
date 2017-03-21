@@ -113,12 +113,11 @@ void fill_buffer(char *buf, unsigned long long len)
 	buffer_filled = 1;
 
 	calculation_done = 0;
+
 	kstart_time = ktime_to_ns(ktime_get());
-	
 	wake_up_interruptible(&wq_buffer);
 
 	printk("Buffer filled\n");
-
 }
 
 void release_buffer(char *buffer)

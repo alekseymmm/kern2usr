@@ -44,7 +44,7 @@ int handle_polling(struct pollfd* pollfd)
 	}
 
 	printf("data copied\n");
-	printf("handling_polling done on CPU: %d.\n", sched_getcpu());
+	printf("handling_polling done on CPU: %d, PID: %d\n", sched_getcpu(), getpid());
 	return 0;
 }
 
@@ -57,6 +57,7 @@ int main()
 	uint64_t value = 0;
 	int stop_polling = 0;
 
+	printf("My PID: %d\n", getpid());
 	dst_buffer = malloc(BUF_TEST_SIZE);
 	printf("dst_buffer in user space = %p\n", dst_buffer);
 
@@ -74,7 +75,7 @@ int main()
 	pollfd.fd = chdev_fd;
 	pollfd.events = POLLIN;
 
-	printf("Start polling on CPU: %d ...\n", sched_getcpu());
+	printf("Start polling on CPU: %d, PID: %d ...\n", sched_getcpu(), getpid());
 	fflush(stdout);
 
 	while(!stop_polling){
@@ -82,7 +83,7 @@ int main()
 
 		switch (result) {
 		case 0:
-			printf("timeout in polling on CPU: %d\n", sched_getcpu());
+			printf("timeout in polling on CPU: %d, PID: %d\n", sched_getcpu(), getpid());
 			break;
 		case -1:
 			printf("poll error -1. Exiting...\n");
