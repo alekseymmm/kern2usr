@@ -35,6 +35,7 @@ extern long long int total_time ;
 
 extern long long int kstart_time , kstop_time ;
 extern long long int ktotal_time , num_tests;
+extern struct eventfd_ctx *efd_ctx;
 
 ssize_t mmaptest_read(struct file *filep, char *buffer, size_t len, loff_t *offset){
 //   int error_count = 0;
@@ -93,7 +94,7 @@ int mmaptest_release(struct inode *inode, struct file *filp){
 long mmaptest_ioctl(struct file *file,
 		unsigned int ioctl_num, unsigned long ioctl_param){
 	char *usr_buffer = NULL;
-
+	uint64_t value = 0;
 	switch (ioctl_num){
 	case IOCTL_USR_COPY_DONE:
 		calculation_done = 1;
@@ -128,6 +129,7 @@ long mmaptest_ioctl(struct file *file,
 		printk("Time for this calculation(usr)= %lld\n", kstop_time - kstart_time);
 		printk("Total time (usr)= %lld\n", ktotal_time);
 		num_tests++;
+		eventfd_ctx_read(efd_ctx, 0, &value);
 		printk("Avg_time (usr) = %lld\n", ktotal_time / num_tests);
 
 		break;

@@ -17,6 +17,8 @@
 #include <sys/poll.h>
 #include <sys/eventfd.h>
 
+#include <sched.h>
+
 #include <errno.h>
 
 #include "kern/kern.h"
@@ -34,36 +36,16 @@ int handle_polling(struct pollfd* pollfd)
 {
 	uint64_t value = 0;
 	int ret = 0;
-	read(pollfd->fd, &value, sizeof(uint64_t));
-
-	printf("In handling_polling value in eventfd = %lu\n", value);
-	switch(value){
-	case EFD_MMAP_CMD:
-		printf("Got mmap command in polling eventfd\n");
-		//do_mmap(pathname);
-		break;
-	case EFD_START_TEST_CMD:
-		printf("Eventfd reset to 0 after test start\n");
-		break;
-	case EFD_STOP_TEST_CMD:
-		printf("Eventfd reset to 0 after test stop\n");
-		break;
-	case EFD_MEMORY_READY:
 		//printf("call ioctl to copy data to %p\n", dst_buffer);
 		ret = ioctl(chdev_fd, IOCTL_GET_BUFFER, dst_buffer);
 
 		if(ret){
 			printf("Error while copying in ioctl : %d\n", ret);
-			break;
+			return -1;//break;
 		}
 		printf("data copied\n");
 
-		break;
-	case EFD_EXIT_TEST_CMD:
-		printf("Stop polling cmd received\n");
-		break;
-	}
-	printf("handling_polling done!\n");
+	printf("handling_polling done on CPU: %d, PID: %d\n", sched_getcpu(), getpid());	
 	return value;
 }
 
@@ -117,7 +99,7 @@ int main()
 
 		switch (result) {
 		case 0:
-			printf("timeout in polling\n");
+			printf("timeout in polling on CPU: %d, PID: %d\n", sched_getcpu(), getpid());			
 			break;
 		case -1:
 			printf("poll error -1. Exiting...\n");
