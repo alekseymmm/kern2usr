@@ -25,7 +25,7 @@
 
 #include "kern.h"
 
-//extern wait_queue_head_t wq_buffer; //wait till the buffer filled;
+extern wait_queue_head_t wq_buffer; //wait till the buffer filled;
 extern char *buffer;
 extern int buffer_filled;
 extern int calculation_done;
@@ -117,11 +117,12 @@ long mmaptest_ioctl(struct file *file,
 			printk("Failed to copy to usr buffer = %p\n", usr_buffer);
 			return -1;
 		}
+		kstop_time = ktime_to_ns(ktime_get());
+		ktotal_time += kstop_time - kstart_time;
 
 		calculation_done = 1;
 		buffer_filled = 0;
-		kstop_time = ktime_to_ns(ktime_get());
-		ktotal_time += kstop_time - kstart_time;
+
 		printk("In ioctl %d bytes copied to user address = %p \n", BUF_TEST_SIZE,  usr_buffer);
 
 		printk("Calculcation done!!!\n");
@@ -139,11 +140,11 @@ unsigned int mmaptest_poll(struct file *file, struct poll_table_struct *pwait)
 {
 	unsigned int mask = 0;
 
-	//poll_wait(file, &wq_buffer, pwait);
+	poll_wait(file, &wq_buffer, pwait);
 	//printk("In poll: buffer_filled = %d, calculation_done = %d\n", buffer_filled, calculation_done);
 
 	if(buffer_filled && !calculation_done){
-		printk("Mask assign to POLLIN\n");
+		//printk("Mask assign to POLLIN\n");
 		mask |= POLLIN;
 	}
 	return mask;

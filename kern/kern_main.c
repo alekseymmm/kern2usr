@@ -28,6 +28,8 @@
 #include "kern.h"
 #include "fops_chdev.h"
 
+wait_queue_head_t wq_buffer; //wait till the buffer filled
+
 char *buffer;
 char *usr_buffer = NULL;
 
@@ -44,65 +46,9 @@ long long int total_time = 0;
 long long int kstart_time = 0, kstop_time = 0;
 long long int ktotal_time = 0, num_tests = 0;
 
-//Structs from userspace
-unsigned long usr_pid = 0;
-unsigned long usr_efd = 3;
-unsigned long usr_efd2 = 4;
+//sysfs param
 unsigned long cur_cmd = 0;
 
-//Structs to resolve references to fd
-struct task_struct *userspace_task = NULL;	//ptr to usr space task struct
-struct file *efd_file = NULL;				//ptr to eventfd's file struct
-struct file *efd_file2 = NULL;				//ptr to eventfd's file struct
-struct eventfd_ctx *efd_ctx = NULL;			//ptr to eventfd context
-struct eventfd_ctx *efd_ctx2 = NULL;			//ptr to eventfd context
-
-int parse_usr_param(void);
-
-static int __set_usr_pid(const char *str, struct kernel_param *kp){
-	int retval;
-	retval = kstrtoul(str, 10, &usr_pid);
-	if(retval < 0){
-		printk("Error while parsing usr_pid.\n");
-		return -1;
-	}
-
-	return 0;
-}
-
-static int __get_usr_pid(char *buffer, struct kernel_param *kp){
-	return scnprintf(buffer, PAGE_SIZE, "%lu", usr_pid);
-}
-
-static int __set_usr_efd(const char *str, struct kernel_param *kp){
-	int retval;
-	retval = kstrtoul(str, 10, &usr_efd);
-	if(retval < 0){
-		printk("Error while parsing usr_efd.\n");
-		return -1;
-	}
-
-	return 0;
-}
-
-static int __get_usr_efd(char *buffer, struct kernel_param *kp){
-	return scnprintf(buffer, PAGE_SIZE, "%lu", usr_efd);
-}
-
-static int __set_usr_efd2(const char *str, struct kernel_param *kp){
-	int retval;
-	retval = kstrtoul(str, 10, &usr_efd2);
-	if(retval < 0){
-		printk("Error while parsing usr_efd2.\n");
-		return -1;
-	}
-
-	return 0;
-}
-
-static int __get_usr_efd2(char *buffer, struct kernel_param *kp){
-	return scnprintf(buffer, PAGE_SIZE, "%lu", usr_efd2);
-}
 
 static int __set_cur_cmd(const char *str, struct kernel_param *kp){
 	int retval;
@@ -113,13 +59,6 @@ static int __set_cur_cmd(const char *str, struct kernel_param *kp){
 	}
 
 	switch (cur_cmd){
-	case EFD_FIND:
-		parse_usr_param();
-		break;
-
-	case EFD_MMAP_CMD:
-		eventfd_signal(efd_ctx, EFD_MMAP_CMD);
-		break;
 
 	case EFD_START_TEST_CMD:
 		testing_started = 1;
@@ -131,11 +70,13 @@ static int __set_cur_cmd(const char *str, struct kernel_param *kp){
 
 		ktotal_time = 0;
 		num_tests = 0;
-		eventfd_signal(efd_ctx, EFD_START_TEST_CMD);
+		//eventfd_signal(efd_ctx, EFD_START_TEST_CMD);
 		break;
 
 	case EFD_STOP_TEST_CMD:
-		printk("Avg copy time = %llu\n", ktotal_time / num_tests);
+		if(num_tests != 0){
+			printk("Avg copy time = %llu\n", ktotal_time / num_tests);
+		}
 
 		del_timer_sync(&calc_timer);
 		printk("Timer is deleted.\n");
@@ -144,12 +85,6 @@ static int __set_cur_cmd(const char *str, struct kernel_param *kp){
 		buffer_filled = 0;
 		calculation_done = 1;
 
-		eventfd_signal(efd_ctx, EFD_STOP_TEST_CMD);
-
-		break;
-
-	case EFD_EXIT_TEST_CMD:
-		eventfd_signal(efd_ctx, EFD_EXIT_TEST_CMD);
 		break;
 
 	default:
@@ -177,10 +112,9 @@ void fill_buffer(char *buf, unsigned long long len)
 
 	calculation_done = 0;
 	kstart_time = ktime_to_ns(ktime_get());
-
-	eventfd_signal(efd_ctx, EFD_MEMORY_READY);
-	//wake_up_interruptible(&wq_buffer);
 	
+	wake_up_interruptible(&wq_buffer);
+
 	printk("Buffer filled\n");
 
 }
@@ -220,39 +154,12 @@ static void __timer_handler(unsigned long param)
 	printk("In handler: buffer_filled = %d, calculation_done = %d\n", buffer_filled, calculation_done);
 
 	if(!buffer_filled || calculation_done){
-		//start monitoring for completion
-		printk("Start monitoring for efd2...\n");
-
 		fill_buffer(buffer, BUF_TEST_SIZE);
 	}
 
 	mod_timer(&calc_timer, jiffies + msecs_to_jiffies(TIMER_DELAY));
 }
 
-int parse_usr_param(){
-	//parse userspace argumetns to find efd
-	printk("Received from userspace: usr_pid=%lu, efd=%lu, efd2=%lu\n", usr_pid, usr_efd, usr_efd2);
-
-	userspace_task = pid_task(find_vpid(usr_pid), PIDTYPE_PID);
-	printk("Resolved pointer to the userspace program task struct: %p\n",userspace_task);
-
-	rcu_read_lock();
-	efd_file = fcheck_files(userspace_task->files, usr_efd);
-	efd_file2 = fcheck_files(userspace_task->files, usr_efd2);
-	rcu_read_unlock();
-
-	printk("Resolved pointer to the userspace program's eventfd's file struct: %p and struct2 : %p\n",efd_file, efd_file2);
-
-	efd_ctx = eventfd_ctx_fileget(efd_file);
-	efd_ctx2 = eventfd_ctx_fileget(efd_file2);
-	if(!efd_ctx || !efd_ctx2){
-		printk("eventfd_ctx_fileget() failed..\n");
-		unregister_chrdev(Major, DEVICE_NAME);
-		return -1;
-	}
-	printk("Resolved pointer to the userspace program's eventfd's context: %p and context2 : %p\n", efd_ctx, efd_ctx2);
-	return 0;
-}
 
 static int __init_module ( void )
 {
@@ -278,6 +185,9 @@ static int __init_module ( void )
 	calc_timer.function = __timer_handler;
 	init_timer(&calc_timer);
 
+	init_waitqueue_head(&wq_buffer);
+	printk("Wait queue initialized.\n");
+
 	return 0;
 }
 
@@ -285,16 +195,6 @@ static void __cleanup_module(void)
 {
 	del_timer_sync(&calc_timer);
 	printk("Calculation timer is stoped\n");
-	if(efd_ctx != NULL){
-		eventfd_signal(efd_ctx, EFD_STOP_TEST_CMD);
-		eventfd_ctx_put(efd_ctx);
-		printk("Put eventfd context\n");
-	}
-	if(efd_ctx2 != NULL){
-		eventfd_signal(efd_ctx2, EFD_STOP_TEST_CMD);
-		eventfd_ctx_put(efd_ctx2);
-		printk("Put eventfd context2\n");
-	}
 
 	release_buffer(buffer);
 	printk("Buffer released.\n");
@@ -306,15 +206,6 @@ static void __cleanup_module(void)
 
 module_init( __init_module);
 module_exit( __cleanup_module);
-
-MODULE_PARM_DESC(usr_pid, "Userspace pid to monitor");
-module_param_call(usr_pid, __set_usr_pid, __get_usr_pid, NULL, S_IRUGO | S_IWUSR);
-
-MODULE_PARM_DESC(usr_efd, "Userspace eventfd to monitor");
-module_param_call(usr_efd, __set_usr_efd, __get_usr_efd, NULL, S_IRUGO | S_IWUSR);
-
-MODULE_PARM_DESC(usr_efd2, "Userspace eventfd for cope done notification");
-module_param_call(usr_efd2, __set_usr_efd2, __get_usr_efd2, NULL, S_IRUGO | S_IWUSR);
 
 MODULE_PARM_DESC(cur_cmd, "Cmd to execute");
 module_param_call(cur_cmd, __set_cur_cmd, __get_cur_cmd, NULL, S_IRUGO | S_IWUSR);
