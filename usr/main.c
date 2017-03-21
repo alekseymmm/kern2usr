@@ -16,6 +16,7 @@
 #include <sys/ioctl.h>
 #include <sys/poll.h>
 #include <sys/eventfd.h>
+#include <sched.h>
 
 #include <errno.h>
 
@@ -43,7 +44,7 @@ int handle_polling(struct pollfd* pollfd)
 	}
 
 	printf("data copied\n");
-	printf("handling_polling done!\n");
+	printf("handling_polling done on CPU: %d.\n", sched_getcpu());
 	return 0;
 }
 
@@ -73,7 +74,7 @@ int main()
 	pollfd.fd = chdev_fd;
 	pollfd.events = POLLIN;
 
-	printf("Start polling...\n");
+	printf("Start polling on CPU: %d ...\n", sched_getcpu());
 	fflush(stdout);
 
 	while(!stop_polling){
@@ -81,7 +82,7 @@ int main()
 
 		switch (result) {
 		case 0:
-			printf("timeout in polling\n");
+			printf("timeout in polling on CPU: %d\n", sched_getcpu());
 			break;
 		case -1:
 			printf("poll error -1. Exiting...\n");
