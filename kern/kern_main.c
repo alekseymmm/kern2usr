@@ -25,6 +25,8 @@
 #include <linux/rcupdate.h>
 #include <linux/eventfd.h>
 
+#include <linux/smp.h>
+
 #include "kern.h"
 #include "fops_chdev.h"
 
@@ -132,7 +134,9 @@ static int __set_cur_cmd(const char *str, struct kernel_param *kp){
 		break;
 
 	case EFD_STOP_TEST_CMD:
-		printk("Avg copy time = %llu\n", ktotal_time / num_tests);
+		if(num_tests != 0){
+			printk("Avg copy time = %llu\n", ktotal_time / num_tests);
+		}
 
 		del_timer_sync(&calc_timer);
 		printk("Timer is deleted.\n");
@@ -188,7 +192,7 @@ void print_buf(char *buf, int len)
 {
 	int i;
 	printk("Buffer :\n");
-	for(i = 0; i < len  ; i++)
+		for(i = 0; i < len  ; i++)
 	{
 		printk("%d, ",buf[i]);
 	}
@@ -211,7 +215,7 @@ static struct file_operations mmaptest_fops = {
 
 static void __timer_handler(unsigned long param)
 {
-	printk("Timer handler called\n");
+	printk("Timer handler called on CPU: %d\n", smp_processor_id());
 	printk("In handler: buffer_filled = %d, calculation_done = %d\n", buffer_filled, calculation_done);
 
 	if(!buffer_filled || calculation_done){

@@ -16,7 +16,7 @@
 #include <sys/ioctl.h>
 #include <sys/poll.h>
 #include <sys/eventfd.h>
-
+#include <sched.h>
 #include <errno.h>
 
 #include "kern/kern.h"
@@ -98,7 +98,7 @@ int handle_polling(struct pollfd* pollfd)
 		printf("Stop polling cmd received\n");
 		break;
 	}
-	printf("handling_polling done!\n");
+	printf("handling_polling done on CPU: %d, PID: %d\n", sched_getcpu(), getpid());
 	return value;
 }
 
@@ -135,14 +135,14 @@ int main()
 	}
 	printf("Memory from char dev = %d mmaped to %p \n", chdev_fd, buffer);
 
-	printf("Start polling...\n");
+	printf("Start polling on CPU: %d, PID: %d ...\n", sched_getcpu(), getpid());
 	fflush(stdout);
 
 	while(1){
 		result = poll(&pollfd, 1, timeout);
 		switch (result) {
 		case 0:
-			printf("timeout in polling\n");
+			printf("timeout in polling on CPU: %d, PID: %d\n", sched_getcpu(), getpid());
 			break;
 		case -1:
 			printf("poll error -1. Exiting...\n");
@@ -152,7 +152,7 @@ int main()
 			{
 				memcpy(dst_buffer, buffer, BUF_TEST_SIZE);
 				ioctl_set_msg(chdev_fd, NULL);
-				printf("Calculation done\n");
+				printf("Calculation done on CPU: %d, PID: %d\n", sched_getcpu(), getpid());
 			}
 		}
 	}
