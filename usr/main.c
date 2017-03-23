@@ -16,6 +16,7 @@
 #include <sys/ioctl.h>
 #include <sys/poll.h>
 #include <sys/eventfd.h>
+#include <sched.h>
 
 #include <errno.h>
 
@@ -98,7 +99,7 @@ int handle_polling(struct pollfd* pollfd)
 		printf("Stop polling cmd received\n");
 		break;
 	}
-	printf("handling_polling done!\n");
+	printf("handling_polling done on CPU: %d, PID: %d\n", sched_getcpu(), getpid());
 	return value;
 }
 
@@ -133,7 +134,7 @@ int main()
 	pollfd.events = POLLIN;
 	//ioctl_set_msg(fd, NULL);
 
-	printf("Start polling...\n");
+	printf("Start polling on CPU: %d, PID: %d ...\n", sched_getcpu(), getpid());
 	fflush(stdout);
 
 	while(!stop_polling){
@@ -143,7 +144,7 @@ int main()
 			printf("timeout in polling\n");
 			break;
 		case -1:
-			printf("poll error -1. Exiting...\n");
+			printf("timeout in polling on CPU: %d, PID: %d\n", sched_getcpu(), getpid());
 			goto out3;
 		default:
 			if(pollfd.revents & POLLIN)
@@ -152,24 +153,9 @@ int main()
 				if(value == EFD_EXIT_TEST_CMD){
 					stop_polling = 1;
 				}
-//				read(pollfd.fd, &u, sizeof(uint64_t));
-//				printf("Eventfd reset to 0 after mmap, value = %lu\n", u);
-//				printf("Got POLLIN in revents\n");
-//				clock_gettime( CLOCK_REALTIME, &time_start);
-//				sleep(3);
-//				clock_gettime( CLOCK_REALTIME, &time_stop);
-//				//ioctl_set_msg(chdev_fd, NULL);
-//				printf("Calculation done\n");
-//				dtime = diff(time_start, time_stop);
-//				printf("Time for this calculation = %ld\n",dtime.tv_sec*1000000000 + dtime.tv_nsec);
 			}
 		}
 	}
-//	ioctl_set_msg(fd, (char *)123456);
-//	printf("Result: %s \n", str);
-//	strcpy(str, usr_str);
-//
-//	printf("new str = %s", str);
 out3:
 	munmap(buffer, BUF_TEST_SIZE);
 out2:

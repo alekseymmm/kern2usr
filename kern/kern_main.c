@@ -25,6 +25,8 @@
 #include <linux/rcupdate.h>
 #include <linux/eventfd.h>
 
+#include <linux/smp.h>
+
 #include "kern.h"
 #include "fops_chdev.h"
 
@@ -183,7 +185,7 @@ void fill_buffer(char *buf, unsigned long long len)
 	eventfd_signal(efd_ctx, EFD_MEMORY_READY);
 	//wake_up_interruptible(&wq_buffer);
 	
-	printk("Buffer filled\n");
+//	printk("Buffer filled\n");
 
 }
 
@@ -221,7 +223,7 @@ static struct file_operations mmaptest_fops = {
 
 static void __timer_handler(unsigned long param)
 {
-	printk("Timer handler called\n");
+	printk("Timer handler called on CPU: %d\n", smp_processor_id());
 	printk("In handler: buffer_filled = %d, calculation_done = %d\n", buffer_filled, calculation_done);
 
 	if(!buffer_filled || calculation_done){

@@ -14,7 +14,7 @@
 
 #define NDRIVES 1
 #define DEVICE_NAME "mmaptest"
-#define BUF_SIZE  (NDRIVES * 4096)
+#define BUF_SIZE  (4 * 1024)
 #define BUF_TEST_SIZE BUF_SIZE
 #define MAJOR_NUM 239
 
