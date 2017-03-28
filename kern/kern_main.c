@@ -54,6 +54,7 @@ unsigned long usr_efd = 3;
 unsigned long usr_efd2 = 4;
 unsigned long cur_cmd = 0;
 
+int start_core = 0;
 //Structs to resolve references to fd
 struct task_struct *userspace_task = NULL;	//ptr to usr space task struct
 struct file *efd_file = NULL;				//ptr to eventfd's file struct
@@ -223,19 +224,22 @@ static struct file_operations mmaptest_fops = {
 
 static void __timer_handler(unsigned long param)
 {
-	printk("Timer handler called on CPU: %d\n", smp_processor_id());
+	start_core = get_cpu();
+	printk("Timer handler called on CPU: %d\n", start_core);
 	printk("In handler: buffer_filled = %d, calculation_done = %d\n", buffer_filled, calculation_done);
 
 	if(!buffer_filled || calculation_done){
 		//start monitoring for completion
 		printk("Start monitoring for efd2...\n");
-		queue_work(kern_wq, &work);
+	//	printk("start_core2 = %d\n", start_core);
+		queue_work_on(smp_processor_id(), kern_wq, &work);
 
 		fill_buffer(buffer, BUF_TEST_SIZE);
 		//print_buf(buffer, BUF_TEST_SIZE);
 	}
 
 	mod_timer(&calc_timer, jiffies + msecs_to_jiffies(TIMER_DELAY));
+	put_cpu();
 }
 
 int parse_usr_param(){
@@ -270,14 +274,8 @@ static void __monitor_efd2(struct work_struct *ws){
 //	mod_timer(&data->vs->timer, jiffies + msecs_to_jiffies(atomic_read(&data->vs->delay)));
 	uint64_t value = 0;
 	int res = 0;
-	//printk("Monitoring efd2 run in  other thread.\n");
-
+//	printk("__monitoring_efd2 called on CPU: %d\n", smp_processor_id());
 	if(testing_started){
-//DO NOT DO THAT!
-//		res = -EAGAIN;
-//		while(res == -EAGAIN){
-//		//printk("In monitoring efd2  testing started  == 1 \n");
-//		res = eventfd_ctx_read(efd_ctx2, O_NONBLOCK, &value);
 	res = eventfd_ctx_read(efd_ctx2, 0, &value);
 		if(res < 0){
 			printk("Error in eventfd_ctx_read : %d\n", res);
@@ -319,7 +317,8 @@ static int __init_module ( void )
 	buffer_filled = 0;
 	calculation_done = 0;
 
-	kern_wq = create_singlethread_workqueue("Kern_WQ");
+	//kern_wq = create_singlethread_workqueue("Kern_WQ");
+	kern_wq = alloc_workqueue("Kern_WQ", WQ_MEM_RECLAIM , 1);
 	if(!kern_wq){
 	   	printk("Cold not create the kern workqueue!\n");
 	   	goto out;
